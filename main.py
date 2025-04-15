@@ -10,6 +10,8 @@ import os
 import google.generativeai as genai
 from dotenv import load_dotenv
 import itertools
+import fetch_data as market_data
+import sys
 
 load_dotenv()
 
@@ -165,44 +167,6 @@ def store_in_faiss(features, ticker):
         logger.error(f"Failed to store data in FAISS for {ticker}: {str(e)}")
 
 
-def fetch_nasdaq_stocks():
-    url = "https://api.nasdaq.com/api/screener/stocks"
-    params = {
-        "limit": 4050,
-        "exchange": "nasdaq"
-    }
-
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-    }
-
-    try:
-        logger.info("Fetching NASDAQ stocks data...")
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        logger.info(f"Successfully fetched {len(data.get('data').get('table').get('rows', []))} stocks")
-        return data
-    except Exception as e:
-        logger.error(f"Failed to fetch NASDAQ stocks: {str(e)}")
-        return None
-
-
-def process_tickers(data):
-    try:
-        tickers = []
-        rows = data.get('data').get('table').get('rows', [])
-        for row in rows:
-            ticker = row.get('symbol')
-            if ticker:
-                tickers.append(ticker)
-        logger.info(f"Successfully processed {len(tickers)} stock symbols")
-        return sorted(tickers)
-    except Exception as e:
-        logger.error(f"Failed to process tickers: {str(e)}")
-        return []
-
-
 def calculate_stock_features_with_insight(ticker):
     try:
         logger.info(f"Processing ticker: {ticker}")
@@ -240,14 +204,16 @@ def calculate_stock_features_with_insight(ticker):
         return np.array([0, 0, 'Amber'])  # Default to 'Amber' in case of error
 
 
-def main():
+def main(exchange):
     # Initialize logging
     logger.info("Stock Analysis Application Started")
 
     try:
         # Run initial job
         logger.info("Running initial stock analysis job...")
-        data = fetch_nasdaq_stocks()
+
+        method = getattr(market_data, exchange, None);
+        data = method(logger)
         if data:
             tickers = process_tickers(data)
             if tickers:
@@ -276,7 +242,7 @@ def main():
         def job():
             try:
                 logger.info("Starting daily stock analysis job...")
-                data = fetch_nasdaq_stocks()
+                data = getattr(market_data, exchange)
                 if data:
                     tickers = process_tickers(data)
                     if tickers:
@@ -308,4 +274,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    exchange = sys.argv[1]
+    if len(exchange) == 0:
+        print("Please provide an exchange name as a command-line argument.")
+        sys.exit(1)
+
+    main(exchange)
