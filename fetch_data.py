@@ -31,7 +31,7 @@ def fetch_nasdaq_stocks(logger):
         response.raise_for_status()
         nasdaq_data = response.json()
         logger.info(f"Successfully fetched {len(nasdaq_data.get('data').get('table').get('rows', []))} stocks")
-        data = process_tickers(nasdaq_data)
+        data = process_tickers(logger, nasdaq_data)
         return data
     except Exception as e:
         logger.error(f"Failed to fetch NASDAQ stocks: {str(e)}")

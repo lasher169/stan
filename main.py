@@ -213,19 +213,17 @@ def main(exchange):
         logger.info("Running initial stock analysis job...")
 
         method = getattr(market_data, exchange, None);
-        data = method(logger)
-        if data:
-            tickers = process_tickers(data)
-            if tickers:
-                for ticker in tickers:
-                    features = calculate_stock_features_with_insight(ticker)
+        tickers = method(logger)
+        if tickers:
+            for ticker in tickers:
+                features = calculate_stock_features_with_insight(ticker)
 
-                    if features is not None:
-                        store_in_faiss(features, ticker)  # Store features in FAISS index
-                    try:
-                        logger.info(f"Successfully processed {ticker}")
-                    except Exception as e:
-                        logger.error(f"Failed to process {ticker}: {str(e)}")
+                if features is not None:
+                    store_in_faiss(features, ticker)  # Store features in FAISS index
+                try:
+                    logger.info(f"Successfully processed {ticker}")
+                except Exception as e:
+                    logger.error(f"Failed to process {ticker}: {str(e)}")
         else:
             logger.warning("No stock data available")
 
