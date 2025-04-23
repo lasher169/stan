@@ -78,7 +78,7 @@ def generate_data_for_ticker(ticker):
             count = len(div_bi_yearly_nonzero)
 
             # Get just the values (flatten to 1D)
-            div_vals = div_yearly.values.flatten()
+            div_vals = div_bi_yearly.values.flatten()
 
             # Check the slope using linear regression
             from scipy.stats import linregress
