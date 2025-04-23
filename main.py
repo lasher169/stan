@@ -9,8 +9,6 @@ from dotenv import load_dotenv
 import fetch_data as market_data
 import sys
 import csv
-import local_models
-
 load_dotenv()
 
 # Configure logging
@@ -70,7 +68,7 @@ def generate_data_for_ticker(ticker):
             div_bi_yearly_nonzero = div_bi_yearly[div_bi_yearly > 0]
 
             # Optional: Look at year-over-year totals to see if it's growing
-            div_yearly = dividends_10y.resample("A").sum()
+            div_yearly = dividends_10y.resample("YE").sum()
 
 
             # Calculate stats
@@ -136,7 +134,7 @@ def main(exchange):
         tickers = method(logger)
         if tickers:
             for ticker in tickers:
-                data, dividends = generate_data_for_ticker("CBA.ax")
+                data, dividends = generate_data_for_ticker(ticker)
                 if len(data) > 0:
                     with open(f'data/{ticker.replace(".ax", "")}.csv', 'w') as f:
                         writer = csv.writer(f)
