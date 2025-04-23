@@ -64,45 +64,48 @@ def generate_data_for_ticker(ticker):
             # Ensure we only look at last 5 years (optional)
             dividends_10y = dividends[dividends.index > "2010-01-01"]
 
-            div_bi_yearly = dividends_10y.resample("2QS").sum()
-            div_bi_yearly_nonzero = div_bi_yearly[div_bi_yearly > 0]
+            if len(dividends_10y) > 0:
+                div_bi_yearly = dividends_10y.resample("2QS").sum()
+                div_bi_yearly_nonzero = div_bi_yearly[div_bi_yearly > 0]
 
-            # Optional: Look at year-over-year totals to see if it's growing
-            div_yearly = dividends_10y.resample("YE").sum()
+                # Optional: Look at year-over-year totals to see if it's growing
+                div_yearly = dividends_10y.resample("YE").sum()
 
 
-            # Calculate stats
-            average_bi = div_bi_yearly_nonzero.mean()
-            average_yearly = div_yearly.mean()
-            std_dev = div_bi_yearly_nonzero.std()
-            count = len(div_bi_yearly_nonzero)
+                # Calculate stats
+                average_bi = div_bi_yearly_nonzero.mean()
+                average_yearly = div_yearly.mean()
+                std_dev = div_bi_yearly_nonzero.std()
+                count = len(div_bi_yearly_nonzero)
 
-            # Get just the values (flatten to 1D)
-            div_vals = div_bi_yearly.values.flatten()
+                # Get just the values (flatten to 1D)
+                div_vals = div_bi_yearly.values.flatten()
 
-            # Check the slope using linear regression
-            from scipy.stats import linregress
+                # Check the slope using linear regression
+                from scipy.stats import linregress
 
-            x = range(len(div_vals))  # Years as 0, 1, 2, ...
-            slope, intercept, r_value, p_value, std_err = linregress(x, div_vals)
+                x = range(len(div_vals))  # Years as 0, 1, 2, ...
+                slope, intercept, r_value, p_value, std_err = linregress(x, div_vals)
 
-            # Interpret the trend
-            if slope > 0.01:
-                trend = "Upward Trend 📈"
-            elif slope < -0.01:
-                trend = "Downward Trend 📉"
+                # Interpret the trend
+                if slope > 0.01:
+                    trend = "Upward Trend 📈"
+                elif slope < -0.01:
+                    trend = "Downward Trend 📉"
+                else:
+                    trend = "Flat or No Clear Trend ➖"
+
+
+                # Compose result string
+                output += f"  Dividend Stability Check for {ticker}:\n"
+                output += f"- Bi Annual dividends: {count}\n"
+                output += f"- Average yearly dividend: ${average_yearly:.4f}\n"
+                output += f"- Average bi yearly dividend: ${average_bi:.4f}\n"
+                output += f"- Std deviation: {std_dev:.4f} "
+                output += "(Very Stable)\n" if std_dev < 0.02 else "(Fluctuating)\n"
+                output += f"- Trend: {trend}\n"
             else:
-                trend = "Flat or No Clear Trend ➖"
-
-
-            # Compose result string
-            output += f"  Dividend Stability Check for {ticker}:\n"
-            output += f"- Bi Annual dividends: {count}\n"
-            output += f"- Average yearly dividend: ${average_yearly:.4f}\n"
-            output += f"- Average bi yearly dividend: ${average_bi:.4f}\n"
-            output += f"- Std deviation: {std_dev:.4f} "
-            output += "(Very Stable)\n" if std_dev < 0.02 else "(Fluctuating)\n"
-            output += f"- Trend: {trend}\n"
+                output += f"No dividends found for {ticker} in last 10 years\n"
         else:
             output += f"No dividends found for {ticker}\n"
 
@@ -134,6 +137,7 @@ def main(exchange):
         tickers = method(logger)
         if tickers:
             for ticker in tickers:
+                # data, dividends = generate_data_for_ticker("AJL.ax")
                 data, dividends = generate_data_for_ticker(ticker)
                 if len(data) > 0:
                     with open(f'data/{ticker.replace(".ax", "")}.csv', 'w') as f:
