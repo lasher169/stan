@@ -50,7 +50,7 @@ def fetch_asx_stocks(logger):
         logger.info(f"Successfully fetched {df.shape} stocks")
         data = []
         for index, row in df.iterrows():
-            data.append(row['ASX code']+".ax")
+            data.append(row['ASX code'])
         return data
     except Exception as e:
         logger.error(f"Failed to fetch ASX stocks: {str(e)}")

@@ -4,12 +4,16 @@ import time
 import schedule
 import logging
 from datetime import datetime
-import yfinance as yf
 from dotenv import load_dotenv
 import fetch_data as market_data
-import sys
 import csv
 load_dotenv()
+from ib_insync import *
+from essentials import TestApp
+import sys
+import threading
+import yfinance as yf
+import paid_models as pm
 
 # Configure logging
 logging.basicConfig(
@@ -21,6 +25,8 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+port = 4002
 
 # FAISS index initialization (or load from file if exists)
 try:
@@ -51,13 +57,15 @@ def store_in_faiss(features, ticker):
 
 
 
-def generate_data_for_ticker(ticker):
+def generate_dividend_for_ticker(ticker, app, currency):
     try:
         logger.info(f"Processing ticker: {ticker}")
         time.sleep(1)
-        stock_data = yf.download(ticker, period="60d", progress=False)
+        ticker="CBA"
+
         dividends = yf.Ticker(ticker).dividends
-        data = []
+        # dividends = app.get_dividend_data(ticker)
+        time.sleep(1)
 
         output = ""
         if len(dividends) > 0:
@@ -109,23 +117,12 @@ def generate_data_for_ticker(ticker):
         else:
             output += f"No dividends found for {ticker}\n"
 
-        if len(stock_data) > 0:
-            info = yf.Ticker(ticker).info
-            data.append(["Symbol", "Sector", "Date", "Close Price", "Volume"])
-            df = stock_data.reset_index()[['Date', 'Close', 'Volume']]
-            for index, row in df.iterrows():
-                # print("date-->", row['Date'][0])
-                date = row['Date'].iloc[0].strftime('%Y-%m-%d')
-                close = row['Close']
-                volume = row['Volume']
-                data.append([ticker, date, close.iloc[0], volume.iloc[0]])
-
-        return data, output
+        return output
     except Exception as e:
         logger.error(f"Failed to fetch data for {ticker}: {str(e)}")
         return None, None
 
-def main(exchange):
+def main(exchange, app):
     # Initialize logging
     logger.info("Stock Analysis Application Started")
 
@@ -135,17 +132,27 @@ def main(exchange):
 
         method = getattr(market_data, exchange, None);
         tickers = method(logger)
+
         if tickers:
             for ticker in tickers:
-                # data, dividends = generate_data_for_ticker("AJL.ax")
-                data, dividends = generate_data_for_ticker(ticker)
+                # data, dividends = generate_data_for_ticker("MX1.ax")
+                dividends = generate_dividend_for_ticker(ticker+".ax", app, "AUD")
+
+                data = app.get_historical_data(ticker)
+                print(f"Data for {ticker}:\n", data)
+                time.sleep(1)  # space requests to avoid rate limits
+
                 if len(data) > 0:
-                    with open(f'data/{ticker.replace(".ax", "")}.csv', 'w') as f:
+                    with open(f'data/{ticker}.csv', 'w') as f:
                         writer = csv.writer(f)
                         writer.writerow([f"Dividend info: {dividends}"])  # Header comment
-                        writer.writerows(data)
+                        writer.writerow(["Date", "Close", "Volume"])  # Header
+                        for bar in data:
+                            writer.writerow([bar.date, bar.close, bar.volume])
 
-                # local_models.generate_insight(data)
+                pm.generate_insight(ticker)
+                # print()
+
         else:
             logger.warning("No stock data available")
 
@@ -166,7 +173,7 @@ def main(exchange):
 
                 if tickers:
                     for ticker in tickers:
-                        data = generate_data_for_ticker(ticker)
+                        data = generate_dividend_for_ticker(ticker)
 
                 else:
                     logger.warning("No stock data available")
@@ -194,4 +201,17 @@ if __name__ == "__main__":
         print("Please provide an exchange name as a command-line argument.")
         sys.exit(1)
 
-    main(exchange)
+    app = TestApp()
+    app.connect("127.0.0.1", port, clientId=0)
+    threading.Thread(target=app.run, daemon=True).start()
+
+    if not app.valid_id_received.wait(timeout=5):
+        print("Failed to receive nextValidId")
+        exit()
+
+    main(exchange, app)
+    # for i in range(3):  # or any list of tickers
+    #     ticker = "14D"
+    #     data = app.get_historical_data(ticker)
+    #     print(f"Data for {ticker}:\n", data)
+    #     time.sleep(1)  # space requests to avoid rate limits

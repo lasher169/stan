@@ -8,6 +8,8 @@ API_KEYS = [
     os.getenv("GOOGLE_API_KEY2"),
     os.getenv("GOOGLE_API_KEY3"),
     os.getenv("GOOGLE_API_KEY4"),
+    os.getenv("GOOGLE_API_KEY5"),
+    os.getenv("GOOGLE_API_KEY6")
 ]
 
 # Remove None values in case some keys are missing
@@ -51,7 +53,7 @@ def enforce_rate_limit():
     api_usage[current_api_key] += 1
     print(f"Using API key {current_api_key}, Request Count: {api_usage[current_api_key]}")
 
-def generate_insight(ticker_data):
+def generate_insight(ticker):
     """
     Generates an investment insight based on a given RAG status, ticker symbol,
     5-day SMA, and 30-day SMA using the Gemini Pro model.
@@ -67,17 +69,22 @@ def generate_insight(ticker_data):
              if an error occurs.
     """
     try:
+
         # Introduce a 10-second delay before switching to the next API key
         time.sleep(10)
 
         # Switch to the next API key
         key = configure_gemini()
 
-        prompt = f"Here is the daily price data for the stock AAPL (or any symbol). Please apply Stan Weinstein’s 4-stage trend analysis using a 30-day moving average. Also identify all points where the 5-day moving average crosses the 30-day moving average (bullish or bearish). For each crossover: \
-	            •	Note the date and direction (bullish or bearish) \
-	            •	Classify the Weinstein stage at the time (Stage 1–4) \
-	            •	Measure price change over the next 10, 20, and 30 trading days \
-	            •	Summarize the strength of the trend (strong, weak, or flat)"
+        with open(f'data/{ticker}.csv', "rb") as file:
+            uploaded_file = model.files.upload(file=file)
+            print(f"File uploaded successfully. File ID: {uploaded_file.id}")
+
+        prompt = f"Given daily prices and dividend history for {ticker}: \
+	            •	Use 30-day MA to assign Stan Weinstein stage (1–4) \
+	            •	Identify 5/30-day MA crossovers: \
+	            •	Date, type (bullish/bearish), stage, price change after 10/20/30 days, trend strength \
+	            •	Comment on dividend pattern (e.g., consistency, yield impact on trend)"
 
         print(f"Sending prompt to Gemini: {prompt}")
 
@@ -87,6 +94,9 @@ def generate_insight(ticker_data):
         print(f"Gemini Response: {insight}")
         return insight
 
+    except FileNotFoundError as e:
+        print(f"Error: File not found at path {e.filename}. Not retrying.")
+        return None
     except Exception as e:
         print(f"Error: {e} (API Key: {key}). Not retrying.")
         return None  # Or handle it as needed
