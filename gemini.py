@@ -1,7 +1,12 @@
+from dotenv import load_dotenv
+load_dotenv()
 import os
 import google.generativeai as genai
 import itertools
 import time
+import pandas as pd
+from io import StringIO
+
 
 API_KEYS = [
     os.getenv("GOOGLE_API_KEY1"),
@@ -31,14 +36,16 @@ def get_next_api_key():
     return next(api_key_cycle)
 
 def configure_gemini():
-    """Configures the Gemini API with the next available API key."""
+    #"""Configures the Gemini API with the next available API key."""
     next_key = get_next_api_key()
     genai.configure(api_key=next_key)
     return next_key
 
 # Set initial API key
 current_api_key = configure_gemini()
-model = genai.GenerativeModel('gemini-2.0-flash')
+# Configure the API key
+genai.configure(api_key=current_api_key)
+
 
 def enforce_rate_limit():
     """Ensures requests do not exceed the allowed limit per API key per minute."""
@@ -46,8 +53,8 @@ def enforce_rate_limit():
 
     if api_usage[current_api_key] >= REQUEST_LIMIT:
         print(f"API key {current_api_key} reached limit. Switching keys...")
-        current_api_key = configure_gemini()
-        api_usage[current_api_key] = 0  # Reset usage for the new key
+        # current_api_key = configure_gemini()
+        # api_usage[current_api_key] = 0  # Reset usage for the new key
         print(f"Switched to API key: {current_api_key}")
 
     api_usage[current_api_key] += 1
@@ -75,24 +82,30 @@ def generate_insight(ticker):
 
         # Switch to the next API key
         key = configure_gemini()
+        genai.configure(api_key=key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
 
-        with open(f'data/{ticker}.csv', "rb") as file:
-            uploaded_file = model.files.upload(file=file)
-            print(f"File uploaded successfully. File ID: {uploaded_file.id}")
+        with open(f'data/{ticker}.csv', 'r') as file:
+            contents = file.read()
 
-        prompt = f"Given daily prices and dividend history for {ticker}: \
-	            •	Use 30-day MA to assign Stan Weinstein stage (1–4) \
-	            •	Identify 5/30-day MA crossovers: \
-	            •	Date, type (bullish/bearish), stage, price change after 10/20/30 days, trend strength \
-	            •	Comment on dividend pattern (e.g., consistency, yield impact on trend)"
+        df = pd.read_csv(StringIO(contents))
+        # Rename columns to remove spaces for easier handling
+        df.rename(columns={'Open Price': 'Open', 'Close Price': 'Close', 'High Price': 'High', 'Low Price': 'Low'}, inplace=True)
+
+
+        prompt = f" Based on the most recent crossover between the 8-day and 21-day simple moving averages (SMA), and checking if today’s Volume is greater than the 20-day average Volume: \n \
+                    Tell me: BUY, SELL, or DO NOTHING. \n \
+                    Only the final decision — no code, tell me what day the 8 day broken past the 21 day. \n \
+                    \n \
+                    {df.to_string()}"
 
         print(f"Sending prompt to Gemini: {prompt}")
 
         response = model.generate_content(prompt)
-        insight = response.text.strip()
 
-        print(f"Gemini Response: {insight}")
-        return insight
+        # store this insight into a db table
+        print(f"Gemini Response: {response.text}")
+        return response.text
 
     except FileNotFoundError as e:
         print(f"Error: File not found at path {e.filename}. Not retrying.")
@@ -100,3 +113,7 @@ def generate_insight(ticker):
     except Exception as e:
         print(f"Error: {e} (API Key: {key}). Not retrying.")
         return None  # Or handle it as needed
+
+if __name__ == "__main__":
+    ticker = "14D"
+    generate_insight(ticker)

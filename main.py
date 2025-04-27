@@ -1,19 +1,12 @@
-import numpy as np
-import faiss
-import time
-import schedule
-import logging
-from datetime import datetime
-from dotenv import load_dotenv
-import fetch_data as market_data
 import csv
-load_dotenv()
-from ib_insync import *
-from essentials import TestApp
+import logging
+import time
+import fetch_data as market_data
+from trade_data import IBKR
 import sys
 import threading
-import yfinance as yf
-import paid_models as pm
+import fetch_dividends as fd
+import gemini
 
 # Configure logging
 logging.basicConfig(
@@ -26,190 +19,78 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 port = 4002
 
-# FAISS index initialization (or load from file if exists)
-try:
-    index = faiss.read_index('faiss_index_file.index')  # Load the index from file
-    logger.info("Loaded existing FAISS index.")
-except Exception as e:
-    index = faiss.IndexFlatL2(2)  # Create a new index if loading fails
-    logger.info("Created new FAISS index.")
-
-
-# Rate-limiting: Automatically reset API usage every minute
-
-
-def store_in_faiss(features, ticker):
-    # Assuming you have a FAISS index created globally
-    try:
-        # Add the feature vector to FAISS
-        index.add(np.array([features[:2]]).astype('float32'))  # Add the first 2 features (SMA-5 and SMA-30)
-
-        # Store ticker with its RAG status (optional: store in a dictionary or separate list)
-        logger.info(f"Stored {ticker} with RAG status: {features[2]}")
-
-        # Save index to file after each addition
-        faiss.write_index(index, 'faiss_index_file.index')
-        logger.info(f"FAISS index saved to 'faiss_index_file.index'.")
-    except Exception as e:
-        logger.error(f"Failed to store data in FAISS for {ticker}: {str(e)}")
-
-
-
-def generate_dividend_for_ticker(ticker, app, currency):
-    try:
-        logger.info(f"Processing ticker: {ticker}")
-        time.sleep(1)
-        ticker="CBA"
-
-        dividends = yf.Ticker(ticker).dividends
-        # dividends = app.get_dividend_data(ticker)
-        time.sleep(1)
-
-        output = ""
-        if len(dividends) > 0:
-            # Ensure we only look at last 5 years (optional)
-            dividends_10y = dividends[dividends.index > "2010-01-01"]
-
-            if len(dividends_10y) > 0:
-                div_bi_yearly = dividends_10y.resample("2QS").sum()
-                div_bi_yearly_nonzero = div_bi_yearly[div_bi_yearly > 0]
-
-                # Optional: Look at year-over-year totals to see if it's growing
-                div_yearly = dividends_10y.resample("YE").sum()
-
-
-                # Calculate stats
-                average_bi = div_bi_yearly_nonzero.mean()
-                average_yearly = div_yearly.mean()
-                std_dev = div_bi_yearly_nonzero.std()
-                count = len(div_bi_yearly_nonzero)
-
-                # Get just the values (flatten to 1D)
-                div_vals = div_bi_yearly.values.flatten()
-
-                # Check the slope using linear regression
-                from scipy.stats import linregress
-
-                x = range(len(div_vals))  # Years as 0, 1, 2, ...
-                slope, intercept, r_value, p_value, std_err = linregress(x, div_vals)
-
-                # Interpret the trend
-                if slope > 0.01:
-                    trend = "Upward Trend 📈"
-                elif slope < -0.01:
-                    trend = "Downward Trend 📉"
+def combine_company_dividend_data(ticker, data, dividends_summary, dividends_count):
+    if len(data) > 0:
+        with open(f'data/{ticker}.csv', 'w') as f:
+            writer = csv.writer(f)
+            writer.writerow(["Date", "Open Price", "Close Price", "Volume", "High Price", "Low Price", "Dividend", "Dividend Yield"])  # Header
+            for row in data:
+                if len(dividends_summary) > 0:
+                    if dividends_summary.get(int(row[0][0:4])) != None:
+                        writer.writerow([row[0], row[1], row[2], row[3], row[4], row[5], dividends_summary.get(int(row[0][0:4])), dividends_summary.get(int(row[0][0:4]))/float(row[2])])
+                    else:
+                        writer.writerow([row[0], row[1], row[2], row[3], row[4], row[5], "N/A", "N/A"])
                 else:
-                    trend = "Flat or No Clear Trend ➖"
+                    writer.writerow([row[0], row[1], row[2], row[3], row[4], row[5], "N/A", "N/A"])
 
+def get_ticker_data(ticker, currency, duration, bar_size):
+    formatted_data = []
+    total_data = app.get_historical_data(ticker, currency, duration, bar_size)
+    print(f"Data for {ticker}:\n", total_data)
+    time.sleep(3)  # space requests to avoid rate limits
+    for data in total_data:
+        formatted_data.append([data.date, data.open, data.close, data.volume, data.high, data.low])
 
-                # Compose result string
-                output += f"  Dividend Stability Check for {ticker}:\n"
-                output += f"- Bi Annual dividends: {count}\n"
-                output += f"- Average yearly dividend: ${average_yearly:.4f}\n"
-                output += f"- Average bi yearly dividend: ${average_bi:.4f}\n"
-                output += f"- Std deviation: {std_dev:.4f} "
-                output += "(Very Stable)\n" if std_dev < 0.02 else "(Fluctuating)\n"
-                output += f"- Trend: {trend}\n"
-            else:
-                output += f"No dividends found for {ticker} in last 10 years\n"
-        else:
-            output += f"No dividends found for {ticker}\n"
+    return formatted_data
 
-        return output
-    except Exception as e:
-        logger.error(f"Failed to fetch data for {ticker}: {str(e)}")
-        return None, None
-
-def main(exchange, app):
+def process_data(app, exchange, currency, duration, bar_size):
     # Initialize logging
     logger.info("Stock Analysis Application Started")
 
     try:
-        # Run initial job
-        logger.info("Running initial stock analysis job...")
-
         method = getattr(market_data, exchange, None);
         tickers = method(logger)
 
         if tickers:
             for ticker in tickers:
-                # data, dividends = generate_data_for_ticker("MX1.ax")
-                dividends = generate_dividend_for_ticker(ticker+".ax", app, "AUD")
+                dividends_summary, dividends_count = fd.generate_dividend_for_ticker(ticker+".ax", app, currency)
+                data = get_ticker_data(ticker, currency, duration, bar_size)
+                combine_company_dividend_data(ticker, data, dividends_summary, dividends_count)
 
-                data = app.get_historical_data(ticker)
-                print(f"Data for {ticker}:\n", data)
-                time.sleep(1)  # space requests to avoid rate limits
-
-                if len(data) > 0:
-                    with open(f'data/{ticker}.csv', 'w') as f:
-                        writer = csv.writer(f)
-                        writer.writerow([f"Dividend info: {dividends}"])  # Header comment
-                        writer.writerow(["Date", "Close", "Volume"])  # Header
-                        for bar in data:
-                            writer.writerow([bar.date, bar.close, bar.volume])
-
-                pm.generate_insight(ticker)
-                # print()
+                insight = gemini.generate_insight(ticker)
+                print(insight)
+                #track_rec.track_stock()
 
         else:
             logger.warning("No stock data available")
 
-        # Schedule daily job
-        now = datetime.now()
-
-        if now.hour >= 19:
-            next_run = now + (24 - now.hour) * 3600
-        else:
-            next_run = now.replace(hour=19, minute=0, second=0)
-
-        logger.info(f"Scheduling daily job at {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
-
-        def job():
-            try:
-                logger.info("Starting daily stock analysis job...")
-                tickers = getattr(market_data, exchange)
-
-                if tickers:
-                    for ticker in tickers:
-                        data = generate_dividend_for_ticker(ticker)
-
-                else:
-                    logger.warning("No stock data available")
-            except Exception as e:
-                logger.error(f"Failed to run daily job: {str(e)}")
-
-        schedule.every().day.at(next_run.strftime("%H:%M")).do(job)
-
-        # Run scheduler
-        while True:
-            try:
-                schedule.run_pending()
-                time.sleep(10)
-            except KeyboardInterrupt:
-                logger.info("Application shutdown requested")
-                break
-
     except Exception as e:
         logger.error(f"Main application error: {str(e)}")
 
-
 if __name__ == "__main__":
-    exchange = sys.argv[1]
-    if len(exchange) == 0:
-        print("Please provide an exchange name as a command-line argument.")
+
+    if len(sys.argv) == 0 or len(sys.argv) < 4:
+        print("Please provide an exchange, currency, days of data in days (60 D), barsize (1 D) name as a command-line argument.")
         sys.exit(1)
 
-    app = TestApp()
+    exchange = sys.argv[1]
+    currency = sys.argv[2]
+    duration = sys.argv[3]
+    bar_size = sys.argv[4]
+
+    app = IBKR()
     app.connect("127.0.0.1", port, clientId=0)
     threading.Thread(target=app.run, daemon=True).start()
+    time.sleep(3)
 
     if not app.valid_id_received.wait(timeout=5):
         print("Failed to receive nextValidId")
         exit()
 
-    main(exchange, app)
+    process_data(app, exchange, currency, duration, bar_size)
     # for i in range(3):  # or any list of tickers
     #     ticker = "14D"
     #     data = app.get_historical_data(ticker)
