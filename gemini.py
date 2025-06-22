@@ -88,13 +88,13 @@ def generate_insight(ticker):
         with open(f'data/{ticker}.csv', 'r') as file:
             contents = file.read()
 
-        df = pd.read_csv(StringIO(contents))
+        df = pd.read_csv(StringIO(contents), index_col='Date')
         # Rename columns to remove spaces for easier handling
         df.rename(columns={'Open Price': 'Open', 'Close Price': 'Close', 'High Price': 'High', 'Low Price': 'Low'}, inplace=True)
 
 
         prompt = f" Based on the most recent crossover between the 8-day and 21-day simple moving averages (SMA), and checking if today’s Volume is greater than the 20-day average Volume: \n \
-                    Tell me: BUY, SELL, or DO NOTHING. \n \
+                    Tell me: STAGE1, STAGE2, STAGE3 or STAGE4. \n \
                     Only the final decision — no code, tell me what day the 8 day broken past the 21 day. \n \
                     \n \
                     {df.to_string()}"

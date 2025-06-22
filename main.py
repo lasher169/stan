@@ -1,12 +1,13 @@
-import csv
 import logging
 import time
+import pandas as pd
 import fetch_data as market_data
 from trade_data import IBKR
 import sys
 import threading
 import fetch_dividends as fd
 import gemini
+import re
 
 # Configure logging
 logging.basicConfig(
@@ -24,27 +25,39 @@ port = 4002
 
 def combine_company_dividend_data(ticker, data, dividends_summary, dividends_count):
     if len(data) > 0:
-        with open(f'data/{ticker}.csv', 'w') as f:
-            writer = csv.writer(f)
-            writer.writerow(["Date", "Open Price", "Close Price", "Volume", "High Price", "Low Price", "Dividend", "Dividend Yield"])  # Header
-            for row in data:
-                if len(dividends_summary) > 0:
-                    if dividends_summary.get(int(row[0][0:4])) != None:
-                        writer.writerow([row[0], row[1], row[2], row[3], row[4], row[5], dividends_summary.get(int(row[0][0:4])), dividends_summary.get(int(row[0][0:4]))/float(row[2])])
-                    else:
-                        writer.writerow([row[0], row[1], row[2], row[3], row[4], row[5], "N/A", "N/A"])
-                else:
-                    writer.writerow([row[0], row[1], row[2], row[3], row[4], row[5], "N/A", "N/A"])
+        # for row in data:
+            # if(len(dividends_summary)) >  0:
+            #     if dividends_summary.get(int(row[0][0:4])) != None:
+            #     row.append(dividends_summary.get(int(row[0][0:4])))
+            #     row.append(dividends_summary.get(int(row[0][0:4])) / float(row[2]))
+            # else:
+            #     row.append("N/A")
+            #     row.append("N/A")
+
+        df = pd.DataFrame(data, columns=["Date", "Open Price", "Close Price", "Volume", "High Price", "Low Price"])
+        df.to_csv(f'data/{ticker}.csv', index=False)
 
 def get_ticker_data(ticker, currency, duration, bar_size):
     formatted_data = []
     total_data = app.get_historical_data(ticker, currency, duration, bar_size)
     print(f"Data for {ticker}:\n", total_data)
-    time.sleep(3)  # space requests to avoid rate limits
+    # time.sleep(3)  # space requests to avoid rate limits
     for data in total_data:
         formatted_data.append([data.date, data.open, data.close, data.volume, data.high, data.low])
 
     return formatted_data
+
+
+def extract_stage_and_date(text):
+    # Find the crossover date
+    date_match = re.search(r"The 8-day SMA broke past the 21-day SMA on \*\*(\d+)\*\*", text)
+    date = date_match.group(1) if date_match else None
+
+    # Find the Stage
+    stage_match = re.search(r'\s*(STAGE\d+)', text, re.IGNORECASE)
+    stage = stage_match.group(1) if stage_match else None
+
+    return stage, date
 
 def process_data(app, exchange, currency, duration, bar_size):
     # Initialize logging
@@ -61,8 +74,9 @@ def process_data(app, exchange, currency, duration, bar_size):
                 combine_company_dividend_data(ticker, data, dividends_summary, dividends_count)
 
                 insight = gemini.generate_insight(ticker)
-                print(insight)
-                #track_rec.track_stock()
+                stage, date = extract_stage_and_date(insight)
+                # tr.track_stock(ticker)
+                print("ticker == ",ticker, "stage == ",stage, "data==", date)
 
         else:
             logger.warning("No stock data available")
