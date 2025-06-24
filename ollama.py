@@ -1,6 +1,8 @@
-import ollama
 import pandas as pd
 from io import StringIO
+
+import ollama
+
 
 def generate_insight(ticker, model):
     """
@@ -34,7 +36,7 @@ def generate_insight(ticker, model):
                             {df.to_string()}"
 
         print(f"Sending prompt to Ollamm: ")
-        response = ollama.chat(model=model, messages=[
+        response = ollama.generate_insight(model=model, messages=[
             {
                 "role": "system",
                 "content": prompt
