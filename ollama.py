@@ -1,6 +1,8 @@
 import ollama
+import pandas as pd
+from io import StringIO
 
-def generate_insight(ticker_data, model):
+def generate_insight(ticker, model):
     """
     Generates an investment insight based on a given RAG status, ticker symbol,
     5-day SMA, and 30-day SMA using the Gemini Pro model.
@@ -16,18 +18,20 @@ def generate_insight(ticker_data, model):
              if an error occurs.
     """
     try:
-        header = ticker_data[0]
-        rows = ticker_data[1:]
-        stock_data_str = '\n'.join([', '.join(map(str, row)) for row in [header] + rows])
+        with open(f'data/{ticker}.csv', 'r') as file:
+            contents = file.read()
+
+        df = pd.read_csv(StringIO(contents), index_col='Date')
+        # Rename columns to remove spaces for easier handling
+        df.rename(columns={'Open Price': 'Open', 'Close Price': 'Close', 'High Price': 'High', 'Low Price': 'Low'},
+                  inplace=True)
+
         # Introduce a 10-second delay before switching to the next API key
-        prompt = f"""Here is the daily stock data with Date and Close. Please apply Stan Weinstein’s 4-stage trend analysis. Use a 30-day moving average to assess the stage (Basing, Advancing, Topping, Declining). Also, identify all points where the 5-day moving average crosses the 30-day moving average (upward or downward). For each crossover: 
-        	                •	Mark the date and whether it’s a bullish (SMA5 > SMA30) or bearish (SMA5 < SMA30) crossover. 
-        	                •	Tell me which Weinstein stage the stock is in at that time. 
-        	                •	Measure the price change in the 10, 20, and 30 days after the crossover. 
-        	                •	Give an opinion on whether the trend that followed was strong, weak, or flat. 
-        	      Stock data:          
-                  {stock_data_str}
-        	      """
+        prompt = f" Based on the most recent crossover between the 8-day and 21-day simple moving averages (SMA), and checking if today’s Volume is greater than the 20-day average Volume: \n \
+                            Tell me: STAGE1, STAGE2, STAGE3 or STAGE4. \n \
+                            Only the final decision — no code, tell me what day the 8 day broken past the 21 day. \n \
+                            \n \
+                            {df.to_string()}"
 
         print(f"Sending prompt to Ollamm: ")
         response = ollama.chat(model=model, messages=[
