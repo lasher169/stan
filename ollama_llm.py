@@ -1,10 +1,9 @@
 import pandas as pd
 from io import StringIO
 
-import ollama
-
-
-def generate_insight(ticker, model):
+from ollama import chat
+from ollama import ChatResponse
+def generate_insight(ticker, model, logger):
     """
     Generates an investment insight based on a given RAG status, ticker symbol,
     5-day SMA, and 30-day SMA using the Gemini Pro model.
@@ -35,19 +34,18 @@ def generate_insight(ticker, model):
                             \n \
                             {df.to_string()}"
 
-        print(f"Sending prompt to Ollamm: ")
-        response = ollama.generate_insight(model=model, messages=[
+        response: ChatResponse = chat(model=model, messages=[
             {
-                "role": "system",
-                "content": prompt
+                'role': 'user',
+                'content': prompt,
             },
         ])
+        print(response['message']['content'])
+        # or access fields directly from the response object
+        print(response.message.content)
 
-        print(f"Sending prompt to Gemini: {prompt}")
-        insight = response.text.strip()
-
-        print(f"{model} Response: {insight}")
-        return insight
+        return response.message.content
 
     except Exception as e:
+        logger.error(f"Error generating insight: {e}")
         return None  # Or handle it as needed

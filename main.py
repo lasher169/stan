@@ -77,9 +77,9 @@ def process_data(app, exchange, currency, duration, bar_size, import_module, mod
 
                 # Generate insight
                 if len(model_name) > 0:
-                    insight = import_module.generate_insight(ticker, model_name)
+                    insight = import_module.generate_insight(ticker, model_name, logger)
                 else:
-                    insight = import_module.generate_insight(ticker)
+                    insight = import_module.generate_insight(ticker, logger)
 
                 stage, date = extract_stage_and_date(insight)
                 tr.track_stock(ticker, stage, data[-1][2])
