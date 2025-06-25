@@ -37,7 +37,8 @@ def generate_insight(ticker, model, logger):
         response: ChatResponse = chat(model=model, messages=[
             {
                 'role': 'user',
-                'content': prompt,
+                  # 'content': prompt,
+                'content': 'Why is the sky blue?',
             },
         ])
         print(response['message']['content'])

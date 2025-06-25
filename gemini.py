@@ -60,7 +60,7 @@ def enforce_rate_limit():
     api_usage[current_api_key] += 1
     print(f"Using API key {current_api_key}, Request Count: {api_usage[current_api_key]}")
 
-def generate_insight(ticker):
+def generate_insight(ticker, logger):
     """
     Generates an investment insight based on a given RAG status, ticker symbol,
     5-day SMA, and 30-day SMA using the Gemini Pro model.
@@ -108,10 +108,10 @@ def generate_insight(ticker):
         return response.text
 
     except FileNotFoundError as e:
-        print(f"Error: File not found at path {e.filename}. Not retrying.")
+        logger.error(f"Error: File not found at path {e.filename}. Not retrying.")
         return None
     except Exception as e:
-        print(f"Error: {e} (API Key: {key}). Not retrying.")
+        logger.error(f"Error: {e} (API Key: {key}). Not retrying.")
         return None  # Or handle it as needed
 
 if __name__ == "__main__":

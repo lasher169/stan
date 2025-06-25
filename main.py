@@ -102,7 +102,12 @@ if __name__ == "__main__":
     duration = sys.argv[3]
     bar_size = sys.argv[4]
     llm = sys.argv[5]
-    model_name = sys.argv[6]
+
+    if len(sys.argv) > 6:
+        model_name = sys.argv[6]
+    else:
+        model_name = ""
+
 
     # Initialize IBKR connection using the setup function
     app = setup_ibkr()  # Call the imported function
