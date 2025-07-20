@@ -87,7 +87,7 @@ def process_data(app, exchange, currency, duration, bar_size, import_module, mod
                     tr.track_stock(ticker, stage=stage, price=data[-1][2])
 
                 if stage.lower() == 'stage3' :
-                    tr.track_stock(ticker, stage, data[-1][2])
+                    tr.track_stock(ticker, stage=stage, price=data[-1][2])
 
                 print("ticker == ",ticker, "stage == ",stage, "data==", data)
 

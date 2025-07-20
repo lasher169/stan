@@ -62,7 +62,6 @@ def track_stock(ticker, stage, price):
                     INSERT INTO tracked_stocks (ticker, open_date, open_price)
                     VALUES (?, ?, ?)
                 ''', (ticker, today, price))
-                check_price_rise(ticker, price)
             else:
                 print(f"{ticker}: Stage {stage[-1]} but no existing position — skipping.")
 
@@ -76,7 +75,6 @@ def track_stock(ticker, stage, price):
                         INSERT INTO tracked_stocks (ticker, open_date, open_price)
                         VALUES (?, ?, ?)
                     ''', (ticker, today, price))
-                    check_price_rise(ticker, price)
                 else:
                     # Already open — do nothing
                     print(f"{ticker}: Already has open position — skipping Stage 2 insert.")
