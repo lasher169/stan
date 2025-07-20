@@ -36,14 +36,13 @@ def check_price_rise(ticker, open_price):
         print(f"[No Change] {ticker} price remains at {open_price}")
 
 # Function to add a stock to track (open or close)
-import sqlite3
-from datetime import datetime
 
 def track_stock(ticker, stage, price):
     initialize_db()
     conn = sqlite3.connect('stocks.db')
     cursor = conn.cursor()
     today = datetime.now().strftime('%Y-%m-%d')
+    stage = stage.lower()
 
     try:
         # Get the most recent row for this stock
@@ -57,27 +56,32 @@ def track_stock(ticker, stage, price):
         last_entry = cursor.fetchone()
 
         if last_entry is None:
-            # No entry exists → insert new open
-            cursor.execute('''
-                INSERT INTO tracked_stocks (ticker, open_date, open_price)
-                VALUES (?, ?, ?)
-            ''', (ticker, today, price))
-            check_price_rise(ticker, price)
+            if stage == 'stage2':
+                # Insert a new open entry
+                cursor.execute('''
+                    INSERT INTO tracked_stocks (ticker, open_date, open_price)
+                    VALUES (?, ?, ?)
+                ''', (ticker, today, price))
+                check_price_rise(ticker, price)
+            else:
+                print(f"{ticker}: Stage {stage[-1]} but no existing position — skipping.")
 
         else:
             rowid, _, close_date, close_price = last_entry
 
-            if stage == 2:
+            if stage == 'stage2':
                 if close_date is not None and close_price is not None:
-                    # Previous entry is closed → insert new open
+                    # Last entry is closed → insert new open entry
                     cursor.execute('''
                         INSERT INTO tracked_stocks (ticker, open_date, open_price)
                         VALUES (?, ?, ?)
                     ''', (ticker, today, price))
                     check_price_rise(ticker, price)
-                # Else: existing is already open → do nothing
+                else:
+                    # Already open — do nothing
+                    print(f"{ticker}: Already has open position — skipping Stage 2 insert.")
 
-            elif stage == 3:
+            elif stage == 'stage3':
                 if close_date is None and close_price is None:
                     # Close the open trade
                     cursor.execute('''
@@ -85,7 +89,10 @@ def track_stock(ticker, stage, price):
                         SET close_date = ?, close_price = ?
                         WHERE rowid = ?
                     ''', (today, price, rowid))
-                # Else: already closed → do nothing
+                    print(f"{ticker}: Closed open position at Stage 3.")
+                else:
+                    # Already closed — do nothing
+                    print(f"{ticker}: Already closed — skipping Stage 3.")
 
         conn.commit()
 
