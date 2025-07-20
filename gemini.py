@@ -93,10 +93,11 @@ def generate_insight(ticker, logger):
         df.rename(columns={'Open Price': 'Open', 'Close Price': 'Close', 'High Price': 'High', 'Low Price': 'Low'}, inplace=True)
 
 
-        prompt = f" Based on the most recent crossover between the 8-day and 21-day simple moving averages (SMA), and checking if today’s Volume is greater than the 20-day average Volume: \n \
-                    Tell me: STAGE1, STAGE2, STAGE3 or STAGE4. \n \
-                    Only the final decision — no code, tell me what day the 8 day broken past the 21 day. \n \
-                    \n \
+        prompt = f" Using price action, 8-day and 21-day SMA, and whether today’s volume > 1.5× 20-day average: \n \
+                    Return: \n \
+                    1. Current stage: STAGE1, STAGE2, STAGE3, or STAGE4 \n \
+                    2. Most recent 8/21 crossover date (if any) \n \
+                    No explanation. No code. Just: STAGEX on YYYY-MM-DD \n \
                     {df.to_string()}"
 
         print(f"Sending prompt to Gemini: {prompt}")

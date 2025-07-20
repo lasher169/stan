@@ -43,7 +43,7 @@ def get_ticker_data(ticker, currency, duration, bar_size):
     formatted_data = []
     total_data = app.get_historical_data(ticker, currency, duration, bar_size)
     print(f"Data for {ticker}:\n", total_data)
-    # time.sleep(3)  # space requests to avoid rate limits
+    time.sleep(3)  # space requests to avoid rate limits
     for data in total_data:
         formatted_data.append([data.date, data.open, data.close, data.volume, data.high, data.low])
 
@@ -51,15 +51,19 @@ def get_ticker_data(ticker, currency, duration, bar_size):
 
 
 def extract_stage_and_date(text):
-    # Find the crossover date
-    date_match = re.search(r"The 8-day SMA broke past the 21-day SMA on \*\*(\d+)\*\*", text)
-    date = date_match.group(1) if date_match else None
+    # Match formats like: "STAGE3 on 2025-05-22"
+    match = re.search(r'\b(STAGE\d)\b\s+on\s+(\d{4}-\d{2}-\d{2})', text, re.IGNORECASE)
 
-    # Find the Stage
-    stage_match = re.search(r'\s*(STAGE\d+)', text, re.IGNORECASE)
-    stage = stage_match.group(1) if stage_match else None
+    if match:
+        stage = match.group(1).upper()
+        date = match.group(2)
+        return stage, date
 
-    return stage, date
+    # Fallback: if only stage present
+    stage_match = re.search(r'\b(STAGE\d)\b', text, re.IGNORECASE)
+    stage = stage_match.group(1).upper() if stage_match else None
+
+    return stage, None
 
 def process_data(app, exchange, currency, duration, bar_size, import_module, model_name):
     # Initialize logging
@@ -84,10 +88,10 @@ def process_data(app, exchange, currency, duration, bar_size, import_module, mod
                 stage, date = extract_stage_and_date(insight)
                 # Only track the stock if its stage is Stage 2
                 if stage.lower() == 'stage2' :
-                    tr.track_stock(ticker, stage=stage, price=data[-1][2])
+                    tr.track_stock(ticker, stage=stage, price=data[-1][2], cross_date=date)
 
                 if stage.lower() == 'stage3' :
-                    tr.track_stock(ticker, stage=stage, price=data[-1][2])
+                    tr.track_stock(ticker, stage=stage, price=data[-1][2], cross_date=date)
 
                 print("ticker == ",ticker, "stage == ",stage, "data==", data)
 

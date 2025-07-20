@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime
 
 def initialize_db():
-    conn = sqlite3.connect('stocks.db')
+    conn = sqlite3.connect('stocks1.db')
     cursor = conn.cursor()
 
     # Create tables if they don't exist
@@ -12,7 +12,9 @@ def initialize_db():
             open_date DATETIME,          -- Date when stock was first tracked
             close_date DATETIME,         -- Date when stock was closed
             open_price REAL,         -- Price at open
-            close_price REAL         -- Price at close
+            close_price REAL,         -- Price at close
+            open_crossover_date DATETIME,  -- Date when crossover occurred
+            close_crossover_date DATETIME -- Date when crossover occurred
         )
     ''')
 
@@ -37,15 +39,14 @@ def check_price_rise(ticker, open_price):
 
 # Function to add a stock to track (open or close)
 
-def track_stock(ticker, stage, price):
+def track_stock(ticker, stage, price, cross_date):
     initialize_db()
-    conn = sqlite3.connect('stocks.db')
+    conn = sqlite3.connect('stocks1.db')
     cursor = conn.cursor()
     today = datetime.now().strftime('%Y-%m-%d')
     stage = stage.lower()
 
     try:
-        # Get the most recent row for this stock
         cursor.execute('''
             SELECT rowid, open_date, close_date, close_price 
             FROM tracked_stocks
@@ -57,11 +58,10 @@ def track_stock(ticker, stage, price):
 
         if last_entry is None:
             if stage == 'stage2':
-                # Insert a new open entry
                 cursor.execute('''
-                    INSERT INTO tracked_stocks (ticker, open_date, open_price)
-                    VALUES (?, ?, ?)
-                ''', (ticker, today, price))
+                    INSERT INTO tracked_stocks (ticker, open_date, open_price, open_cross_date)
+                    VALUES (?, ?, ?, ?)
+                ''', (ticker, today, price, cross_date))
             else:
                 print(f"{ticker}: Stage {stage[-1]} but no existing position — skipping.")
 
@@ -70,26 +70,22 @@ def track_stock(ticker, stage, price):
 
             if stage == 'stage2':
                 if close_date is not None and close_price is not None:
-                    # Last entry is closed → insert new open entry
                     cursor.execute('''
-                        INSERT INTO tracked_stocks (ticker, open_date, open_price)
-                        VALUES (?, ?, ?)
-                    ''', (ticker, today, price))
+                        INSERT INTO tracked_stocks (ticker, open_date, open_price, open_cross_date)
+                        VALUES (?, ?, ?, ?)
+                    ''', (ticker, today, price, cross_date))
                 else:
-                    # Already open — do nothing
                     print(f"{ticker}: Already has open position — skipping Stage 2 insert.")
 
             elif stage == 'stage3':
                 if close_date is None and close_price is None:
-                    # Close the open trade
                     cursor.execute('''
                         UPDATE tracked_stocks
-                        SET close_date = ?, close_price = ?
+                        SET close_date = ?, close_price = ?, close_cross_date = ?
                         WHERE rowid = ?
-                    ''', (today, price, rowid))
+                    ''', (today, price, cross_date, rowid))
                     print(f"{ticker}: Closed open position at Stage 3.")
                 else:
-                    # Already closed — do nothing
                     print(f"{ticker}: Already closed — skipping Stage 3.")
 
         conn.commit()
