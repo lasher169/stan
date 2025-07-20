@@ -82,7 +82,13 @@ def process_data(app, exchange, currency, duration, bar_size, import_module, mod
                     insight = import_module.generate_insight(ticker, logger)
 
                 stage, date = extract_stage_and_date(insight)
-                tr.track_stock(ticker, stage, data[-1][2])
+                # Only track the stock if its stage is Stage 2
+                if stage.lower() == 'stage2' :
+                    tr.track_stock(ticker, stage=stage, price=data[-1][2])
+
+                if stage.lower() == 'stage3' :
+                    tr.track_stock(ticker, stage, data[-1][2])
+
                 print("ticker == ",ticker, "stage == ",stage, "data==", data)
 
         else:
