@@ -85,16 +85,18 @@ def process_data(app, exchange, currency, duration, bar_size, import_module, mod
                 else:
                     insight = import_module.generate_insight(ticker, logger)
 
-                stage, date = extract_stage_and_date(insight)
-                # Only track the stock if its stage is Stage 2
-                if stage.lower() == 'stage2' :
-                    tr.track_stock(ticker, stage=stage, price=data[-1][2], cross_date=date)
+                if insight != None:
+                    stage, date = extract_stage_and_date(insight)
+                    # Only track the stock if its stage is Stage 2
+                    if stage.lower() == 'stage2' :
+                        tr.track_stock(ticker, stage=stage, price=data[-1][2], cross_date=date)
 
-                if stage.lower() == 'stage3' :
-                    tr.track_stock(ticker, stage=stage, price=data[-1][2], cross_date=date)
+                    if stage.lower() == 'stage3' :
+                        tr.track_stock(ticker, stage=stage, price=data[-1][2], cross_date=date)
 
-                print("ticker == ",ticker, "stage == ",stage, "data==", data)
-
+                    print("ticker == ",ticker, "stage == ",stage, "data==", data)
+                else:
+                    print("ticker == ",ticker, 'has no insights as no data found')
         else:
             logger.warning("No stock data available")
 

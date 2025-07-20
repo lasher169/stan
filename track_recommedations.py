@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime
 
 def initialize_db():
-    conn = sqlite3.connect('stocks1.db')
+    conn = sqlite3.connect('stocks.db')
     cursor = conn.cursor()
 
     # Create tables if they don't exist
