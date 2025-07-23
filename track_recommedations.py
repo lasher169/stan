@@ -1,8 +1,9 @@
 import sqlite3
 from datetime import datetime
 
+DATABASE_NAME = 'stocks.db'
 def initialize_db():
-    conn = sqlite3.connect('stocks.db')
+    conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
 
     # Create tables if they don't exist
@@ -41,7 +42,7 @@ def check_price_rise(ticker, open_price):
 
 def track_stock(ticker, stage, price, cross_date):
     initialize_db()
-    conn = sqlite3.connect('stocks1.db')
+    conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
     today = datetime.now().strftime('%Y-%m-%d')
     stage = stage.lower()
@@ -59,7 +60,7 @@ def track_stock(ticker, stage, price, cross_date):
         if last_entry is None:
             if stage == 'stage2':
                 cursor.execute('''
-                    INSERT INTO tracked_stocks (ticker, open_date, open_price, open_cross_date)
+                    INSERT INTO tracked_stocks (ticker, open_date, open_price, open_crossover_date)
                     VALUES (?, ?, ?, ?)
                 ''', (ticker, today, price, cross_date))
             else:
@@ -71,7 +72,7 @@ def track_stock(ticker, stage, price, cross_date):
             if stage == 'stage2':
                 if close_date is not None and close_price is not None:
                     cursor.execute('''
-                        INSERT INTO tracked_stocks (ticker, open_date, open_price, open_cross_date)
+                        INSERT INTO tracked_stocks (ticker, open_date, open_price, open_crossover_date)
                         VALUES (?, ?, ?, ?)
                     ''', (ticker, today, price, cross_date))
                 else:
@@ -81,7 +82,7 @@ def track_stock(ticker, stage, price, cross_date):
                 if close_date is None and close_price is None:
                     cursor.execute('''
                         UPDATE tracked_stocks
-                        SET close_date = ?, close_price = ?, close_cross_date = ?
+                        SET close_date = ?, close_price = ?, close_crossover_date = ?
                         WHERE rowid = ?
                     ''', (today, price, cross_date, rowid))
                     print(f"{ticker}: Closed open position at Stage 3.")
