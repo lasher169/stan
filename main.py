@@ -7,7 +7,7 @@ import threading
 import fetch_dividends as fd
 import re
 import track_recommedations as tr
-from ibkr_setup import setup_ibkr  # Import the function from ibkr_setup.py
+import ibkr  # Import the function from ibkr.py
 from importlib import import_module
 
 
@@ -25,29 +25,9 @@ logger = logging.getLogger(__name__)
 
 port = 4002
 
-def combine_company_dividend_data(ticker, data, dividends_summary, dividends_count):
-    if len(data) > 0:
-        # for row in data:
-            # if(len(dividends_summary)) >  0:
-            #     if dividends_summary.get(int(row[0][0:4])) != None:
-            #     row.append(dividends_summary.get(int(row[0][0:4])))
-            #     row.append(dividends_summary.get(int(row[0][0:4])) / float(row[2]))
-            # else:
-            #     row.append("N/A")
-            #     row.append("N/A")
-
-        df = pd.DataFrame(data, columns=["Date", "Open Price", "Close Price", "Volume", "High Price", "Low Price"])
-        df.to_csv(f'data/{ticker}.csv', index=False)
-
-def get_ticker_data(ticker, currency, duration, bar_size):
-    formatted_data = []
-    total_data = app.get_historical_data(ticker, currency, duration, bar_size)
-    print(f"Data for {ticker}:\n", total_data)
-    time.sleep(3)  # space requests to avoid rate limits
-    for data in total_data:
-        formatted_data.append([data.date, data.open, data.close, data.volume, data.high, data.low])
-
-    return formatted_data
+def get_ticker_data(ticker, currency, duration, bar_size, dollar_size_limit):
+    total_data = ibkr.getData(app, ticker, currency, duration, bar_size, dollar_size_limit)
+    return total_data
 
 
 def extract_stage_and_date(text):
@@ -65,7 +45,7 @@ def extract_stage_and_date(text):
 
     return stage, None
 
-def process_data(app, exchange, currency, duration, bar_size, import_module, model_name):
+def process_data(app, exchange, currency, duration, bar_size, import_module, model_name, dollar_size_limit):
     # Initialize logging
     logger.info("Stock Analysis Application Started")
 
@@ -75,30 +55,30 @@ def process_data(app, exchange, currency, duration, bar_size, import_module, mod
 
         if tickers:
             for ticker in tickers:
-                dividends_summary, dividends_count = fd.generate_dividend_for_ticker(ticker+".ax", app, currency)
-                data = get_ticker_data(ticker, currency, duration, bar_size)
-                combine_company_dividend_data(ticker, data, dividends_summary, dividends_count)
+                # dividends_summary, dividends_count = fd.generate_dividend_for_ticker(ticker+".ax", app, currency)
+                data = get_ticker_data(ticker, currency, duration, bar_size, dollar_size_limit)
 
-                # Generate insight
-                if len(model_name) > 0:
-                    insight = import_module.generate_insight(ticker, model_name, logger)
-                else:
-                    insight = import_module.generate_insight(ticker, logger)
+                if data:
+                    # Generate insight
+                    if len(model_name) > 0:
+                        insight = import_module.generate_insight(ticker, model_name, logger)
+                    else:
+                        insight = import_module.generate_insight(ticker, logger)
 
-                if insight != None:
-                    stage, date = extract_stage_and_date(insight)
-                    # Only track the stock if its stage is Stage 2
-                    if stage.lower() == 'stage2' :
-                        tr.track_stock(ticker, stage=stage, price=data[-1][2], cross_date=date)
+                    if insight != None:
+                        stage, date = extract_stage_and_date(insight)
+                        # Only track the stock if its stage is Stage 2
+                        if stage.lower() == 'stage2' :
+                            tr.track_stock(ticker, stage=stage, price=data[-1].close, cross_date=date)
 
-                    if stage.lower() == 'stage3' :
-                        tr.track_stock(ticker, stage=stage, price=data[-1][2], cross_date=date)
+                        if stage.lower() == 'stage3' :
+                            tr.track_stock(ticker, stage=stage, price=data[-1].close, cross_date=date)
 
-                    print("ticker == ",ticker, "stage == ",stage, "data==", data)
-                else:
-                    print("ticker == ",ticker, 'has no insights as no data found')
+                        print("ticker == ",ticker, "stage == ",stage, "data==", data)
+                    else:
+                        print("ticker == ",ticker, 'has no insights as no data found')
         else:
-            logger.warning("No stock data available")
+            logger.warning(f"No stock data available from {exchange}")
 
     except Exception as e:
         logger.error(f"Main application error: {str(e)}")
@@ -113,16 +93,17 @@ if __name__ == "__main__":
     currency = sys.argv[2]
     duration = sys.argv[3]
     bar_size = sys.argv[4]
-    llm = sys.argv[5]
+    dollar_size_limit = sys.argv[5]
+    llm = sys.argv[6]
 
-    if len(sys.argv) > 6:
-        model_name = sys.argv[6]
+    if len(sys.argv) > 7:
+        model_name = sys.argv[7]
     else:
         model_name = ""
 
 
     # Initialize IBKR connection using the setup function
-    app = setup_ibkr()  # Call the imported function
+    app = ibkr.setup_ibkr()  # Call the imported function
     threading.Thread(target=app.run, daemon=True).start()
     time.sleep(3)
 
@@ -134,4 +115,4 @@ if __name__ == "__main__":
 
     # Ensure the database is initialized before processing data
     tr.initialize_db()
-    process_data(app, exchange, currency, duration, bar_size, imported_module, model_name)
+    process_data(app, exchange, currency, duration, bar_size, imported_module, model_name, dollar_size_limit)
