@@ -60,7 +60,7 @@ def enforce_rate_limit():
     api_usage[current_api_key] += 1
     print(f"Using API key {current_api_key}, Request Count: {api_usage[current_api_key]}")
 
-def generate_insight(ticker, logger):
+def generate_insight(ticker, logger, data):
     """
     Generates an investment insight based on a given RAG status, ticker symbol,
     5-day SMA, and 30-day SMA using the Gemini Pro model.
@@ -85,20 +85,23 @@ def generate_insight(ticker, logger):
         genai.configure(api_key=key)
         model = genai.GenerativeModel('gemini-2.0-flash')
 
-        with open(f'data/{ticker}.csv', 'r') as file:
-            contents = file.read()
+        content = []
 
-        df = pd.read_csv(StringIO(contents), index_col='Date')
-        # Rename columns to remove spaces for easier handling
-        df.rename(columns={'Open Price': 'Open', 'Close Price': 'Close', 'High Price': 'High', 'Low Price': 'Low'}, inplace=True)
+        content.append("Date, Open, High, Low, Close, Volume\n")
 
+        for row in data:
+            content.append(f"{row.date},{row.open},{row.high},{row.low},{row.close},{row.volume}\n")
 
-        prompt = f" Using price action, 8-day and 21-day SMA, and whether today’s volume > 1.5× 20-day average: \n \
-                    Return: \n \
+        prompt = f" Using price action, 5-day and 30-day SMA crossover, and whether today’s volume is > 1.5× the 30-day average: \n \
+                 Determine the most recent **confirmed** trend stage breakout according to Stan Weinstein’s method. A valid Stage 2 must: \n \
+                - follow a sustained 5 / 30 bullish crossover, \n \
+                - break above recent resistance, \n \
+                - and show strong volume confirmation. \n \
+                Return: \n \
                     1. Current stage: STAGE1, STAGE2, STAGE3, or STAGE4 \n \
-                    2. Most recent 8/21 crossover date (if any) \n \
+                    2. Most recent 5/30 crossover date (if any) \n \
                     No explanation. No code. Just: STAGEX on YYYY-MM-DD \n \
-                    {df.to_string()}"
+                    {', '.join(map(str, content))}"
 
         print(f"Sending prompt to Gemini: {prompt}")
 

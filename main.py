@@ -1,15 +1,13 @@
 import logging
-import time
-import pandas as pd
-import fetch_data as market_data
+import re
 import sys
 import threading
-import fetch_dividends as fd
-import re
-import track_recommedations as tr
-import ibkr  # Import the function from ibkr.py
+import time
 from importlib import import_module
 
+import fetch_data as market_data
+import ibkr  # Import the function from ibkr.py
+import track_recommedations as tr
 
 # Configure logging
 logging.basicConfig(
@@ -61,17 +59,14 @@ def process_data(app, exchange, currency, duration, bar_size, import_module, mod
                 if data:
                     # Generate insight
                     if len(model_name) > 0:
-                        insight = import_module.generate_insight(ticker, model_name, logger)
+                        insight = import_module.generate_insight(ticker, model_name, logger, data)
                     else:
-                        insight = import_module.generate_insight(ticker, logger)
+                        insight = import_module.generate_insight(ticker, logger, data)
 
                     if insight != None:
                         stage, date = extract_stage_and_date(insight)
                         # Only track the stock if its stage is Stage 2
                         if stage.lower() == 'stage2' :
-                            tr.track_stock(ticker, stage=stage, price=data[-1].close, cross_date=date)
-
-                        if stage.lower() == 'stage3' :
                             tr.track_stock(ticker, stage=stage, price=data[-1].close, cross_date=date)
 
                         print("ticker == ",ticker, "stage == ",stage, "data==", data)
