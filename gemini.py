@@ -93,21 +93,20 @@ def generate_insight(logger, data):
 
             # === Base rules for all stocks ===
             base_prompt = (
-                "Act as a rules-based trading analyst. Using the provided OHLCV data, determine the stock's current stage based on the strict interpretation of Stan Weinstein's method.\n\n"
-
+                "Act as a rules-based trading analyst. Using the provided OHLCV data, determine the stock's current stage based on a strict, classic Stan Weinstein method.\n\n"
                 "**Stage Rules:**\n"
                 "1. **Stage 1 (Basing):** The 30-day SMA is flattening (trending sideways). The price oscillates above and below the 30-day SMA.\n"
-                "2. **Stage 2 (Advancing):** Must meet all three criteria:\n"
+                "2. **Stage 2 (Advancing):** Must meet all three criteria, all on the same day:\n"
                 "   a. **Breakout:** The price closes decisively above the Stage 1 resistance range, with a bullish 5/30 SMA crossover in place.\n"
                 "   b. **Volume:** The breakout occurs on volume at least 2 times the 30-day average.\n"
-                "   c. **Continuation:** The stock establishes a pattern of higher highs and higher lows. The price must consistently find support at or above a rising 30-day SMA.\n\n"
+                "   c. **Do NOT wait for a pattern of higher highs or higher lows. Stage 2 is confirmed immediately on the breakout day if the above conditions are met.**\n"
+                "   - After entry, monitor for continuation, but entry is made on breakout day if above criteria are met.\n\n"
                 "3. **Stage 3 (Topping):** After a Stage 2 advance, the 30-day SMA flattens. Price action becomes choppy and more frequently crosses below the 30-day SMA. A bearish 5/30 crossover may occur.\n"
                 "4. **Stage 4 (Declining):** The price is consistently below a declining 30-day SMA, often with the 5-day SMA also below. Price forms lower highs and lower lows.\n\n"
-
                 "Evaluate the most recent data first. Identify:\n"
                 "- The current stage of the stock (STAGE1, STAGE2, STAGE3, or STAGE4)\n"
-                "- The most recent **confirmed 5/30 bullish crossover** date that initiated a valid Stage 2 breakout (if any)\n\n"
-
+                "- The most recent **confirmed 5/30 bullish crossover** date that initiated a valid Stage 2 breakout (if any)\n"
+                "**Always identify the current stage based on the latest data, even if a previous Stage 2 breakout was detected. Never report Stage 2 if the stock is now in Stage 3 or Stage 4.**\n\n"
                 "Return only the following format:\n"
                 "STAGEX Crossover on YYYY-MM-DD at $CLOSE_PRICE\n"
             )
