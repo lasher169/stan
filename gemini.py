@@ -60,7 +60,7 @@ def enforce_rate_limit():
     api_usage[current_api_key] += 1
     print(f"Using API key {current_api_key}, Request Count: {api_usage[current_api_key]}")
 
-def generate_insight(ticker, logger, data, open_crossover_date, open_crossover_price):
+def generate_insight(logger, data):
     """
     Generates an investment insight based on a given RAG status, ticker symbol,
     5-day SMA, and 30-day SMA using the Gemini Pro model.
@@ -109,8 +109,7 @@ def generate_insight(ticker, logger, data, open_crossover_date, open_crossover_p
                 "- The most recent **confirmed 5/30 bullish crossover** date that initiated a valid Stage 2 breakout (if any)\n\n"
 
                 "Return only the following format:\n"
-                "STAGEX on YYYY-MM-DD at $CLOSE_PRICE\n"
-                "Crossover on YYYY-MM-DD at $CLOSE_PRICE\n"
+                "STAGEX Crossover on YYYY-MM-DD at $CLOSE_PRICE\n"
             )
 
             # # === Optional Stage99 block for flagged shares

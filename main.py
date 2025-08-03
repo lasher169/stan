@@ -43,20 +43,26 @@ def get_ticker_data(app, ticker, currency, duration, bar_size, dollar_size_limit
 
 
 def extract_stage_and_date(text):
-    stage_match = re.search(r'\b(STAGE\d{1,2})\b\s+on\s+(\d{4}-\d{2}-\d{2})\s+at\s+\$([0-9]*\.?[0-9]+)', text, re.IGNORECASE)
-    cross_match = re.search(r'\bCrossover\b\s+on\s+(\d{4}-\d{2}-\d{2})\s+at\s+\$([0-9]*\.?[0-9]+)', text, re.IGNORECASE)
+    """
+    Extracts the stage, crossover date, and crossover price from text like:
+    "STAGE2 Crossover on 2025-05-21 at $4.71"
+    or
+    "STAGE3 on 2025-08-01 at $5.69"
 
-    stage = None
-    cross_date = cross_price = None
+    Returns:
+        (stage, cross_date, cross_price)
+    """
+    # Regex matches "STAGEX [Crossover] on YYYY-MM-DD at $PRICE"
+    pattern = r'\b(STAGE\d{1,2})\b(?:\s+Crossover)?\s+on\s+(\d{4}-\d{2}-\d{2})\s+at\s+\$([0-9]*\.?[0-9]+)'
+    match = re.search(pattern, text, re.IGNORECASE)
 
-    if stage_match:
-        stage = stage_match.group(1).upper()
-
-    if cross_match:
-        cross_date = cross_match.group(1)
-        cross_price = float(cross_match.group(2))
-
-    return stage, cross_date, cross_price
+    if match:
+        stage = match.group(1).upper()
+        cross_date = match.group(2)
+        cross_price = float(match.group(3))
+        return stage, cross_date, cross_price
+    else:
+        return None, None, None
 
 def process_data(app, exchange, currency, duration, bar_size, import_module, model_name, dollar_size_limit):
     # Initialize logging
@@ -100,8 +106,6 @@ def check_db_stocks_still_stage_2(app, currency, duration, bar_size, import_modu
     for rec in open_positions:
         ticker = rec["ticker"]
         buy_date = rec["open_date"]
-        open_crossover_price = rec.get("open_crossover_price")    # Your breakout price field
-        open_crossover_date = rec.get("open_crossover_date")      # Your breakout date field
         print(f"Checking {ticker} flagged on {buy_date}")
 
         try:
@@ -111,9 +115,9 @@ def check_db_stocks_still_stage_2(app, currency, duration, bar_size, import_modu
             if data:
                 # Generate insight using the same process_data logic
                 if model_name:
-                    insight = import_module.generate_insight(ticker, model_name, logger, data)
+                    insight = import_module.generate_insight(model_name, logger, data)
                 else:
-                    insight = import_module.generate_insight(ticker, logger, data, open_crossover_date, open_crossover_price)
+                    insight = import_module.generate_insight(logger, data)
 
                 if insight:
                     stage, close_crossover_date, close_crossover_price = extract_stage_and_date(insight)
@@ -122,8 +126,7 @@ def check_db_stocks_still_stage_2(app, currency, duration, bar_size, import_modu
                         close_date = data[-1].date
                         close_price = data[-1].close
                         print(f"Closing {ticker}: moved to {stage} on {close_crossover_date} at {close_crossover_price}")
-                        tr.update_close_info(ticker, close_date=close_date, close_price=close_price
-                                             , close_crossover_date=close_crossover_date, close_crossover_price=close_crossover_price)
+                        tr.update_close_info(ticker, close_date=close_date, close_price=close_price, close_crossover_date=close_crossover_date, close_crossover_price=close_crossover_price)
 
                     logger.info(f"{ticker} is still in stage2")
 
