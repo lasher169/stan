@@ -1,4 +1,5 @@
 from trade_data import IBKR
+from ib_insync import *
 import time
 def setup_ibkr(port=4002):
     ibkr = IBKR()
@@ -44,3 +45,49 @@ def getData(app, ticker, currency, duration, bar_size, dollar_size_limit):
         print(f"No data available {ticker}")
 
     return []
+
+def stop_pct_from_price(price):
+    if price < 0.2:
+        return 0.12
+    elif price < 0.5:
+        return 0.08
+    elif price < 1:
+        return 0.06
+    elif price < 5:
+        return 0.05
+    elif price < 10:
+        return 0.04
+    elif price < 20:
+        return 0.03
+    else:
+        return 0.025
+
+def place_order(app, ticker, price, action, exchange, currency, volume, logger):
+    '''
+    Places a limit order with a protective stop-loss order.
+    action = 'BUY' or 'SELL'
+    '''
+    contract = Stock(ticker, exchange, currency)
+
+    # Define limit entry order
+    limit_order = LimitOrder(action, volume, price)
+
+    # Place entry order
+    trade = app.placeOrder(contract, limit_order)
+    app.sleep(1)
+
+    # Determine stop price
+    stop_pct = stop_pct_from_price(price)
+    if action.upper() == 'BUY':
+        stop_price = round(price * (1 - stop_pct), 4)
+        stop_action = 'SELL'
+    else:
+        stop_price = round(price * (1 + stop_pct), 4)
+        stop_action = 'BUY'
+
+    # Define stop-loss order (separate order)
+    stop_order = StopOrder(stop_action, volume, stop_price)
+    app.placeOrder(contract, stop_order)
+
+    logger.info(f"Limit {action.upper()} at {price} placed.")
+    logger.info(f"Stop {stop_action} at {stop_price} placed.")
