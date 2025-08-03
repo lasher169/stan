@@ -104,9 +104,10 @@ def generate_insight(logger, data):
                 "3. **Stage 3 (Topping):** After a Stage 2 advance, the 30-day SMA flattens. Price action becomes choppy and more frequently crosses below the 30-day SMA. A bearish 5/30 crossover may occur.\n"
                 "4. **Stage 4 (Declining):** The price is consistently below a declining 30-day SMA, often with the 5-day SMA also below. Price forms lower highs and lower lows.\n\n"
                 "Evaluate the most recent data first. Identify:\n"
-                "- The current stage of the stock (STAGE1, STAGE2, STAGE3, or STAGE4)\n"
-                "- The most recent **confirmed 5/30 bullish crossover** date that initiated a valid Stage 2 breakout (if any)\n"
-                "**Always identify the current stage based on the latest data, even if a previous Stage 2 breakout was detected. Never report Stage 2 if the stock is now in Stage 3 or Stage 4.**\n\n"
+                "- The current stage of the stock (STAGE1, STAGE2, STAGE3, or STAGE4) based on the latest data.\n"
+                "- The most recent **confirmed 5/30 bullish crossover** date and closing price that initiated a valid Stage 2 breakout, if one ever occurred in the data.\n"
+                "- **Always output the most recent valid 5/30 bullish crossover date and price, even if the current stage is not Stage 2. If no Stage 2 breakout occurred, return 'None' for the crossover date and price.**\n"
+                "- Never report Stage 2 if the stock is now in Stage 3 or Stage 4.\n\n"
                 "Return only the following format:\n"
                 "STAGEX Crossover on YYYY-MM-DD at $CLOSE_PRICE\n"
             )
