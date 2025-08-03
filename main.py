@@ -4,17 +4,31 @@ import sys
 import threading
 import time
 from importlib import import_module
+from logging.handlers import TimedRotatingFileHandler
 
 import fetch_data as market_data
 import ibkr  # Import the function from ibkr.py
 import track_recommedations as tr
+
+# Create a handler that rotates the log file at midnight
+rotating_handler = TimedRotatingFileHandler(
+    'stock_analysis.log',
+    when='midnight',       # Rotate at midnight
+    interval=1,            # Every 1 day
+    backupCount=7,         # Keep 7 days of logs
+    encoding='utf-8'
+)
+
+# Optional: add a suffix to log file names for clarity
+rotating_handler.suffix = "%Y-%m-%d"
+
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('stock_analysis.log'),
+        rotating_handler,
         logging.StreamHandler()
     ]
 )
@@ -23,25 +37,26 @@ logger = logging.getLogger(__name__)
 
 port = 4002
 
-def get_ticker_data(ticker, currency, duration, bar_size, dollar_size_limit):
+def get_ticker_data(app, ticker, currency, duration, bar_size, dollar_size_limit):
     total_data = ibkr.getData(app, ticker, currency, duration, bar_size, dollar_size_limit)
     return total_data
 
 
 def extract_stage_and_date(text):
-    # Match formats like: "STAGE3 on 2025-05-22"
-    match = re.search(r'\b(STAGE\d)\b\s+on\s+(\d{4}-\d{2}-\d{2})', text, re.IGNORECASE)
+    stage_match = re.search(r'\b(STAGE\d{1,2})\b\s+on\s+(\d{4}-\d{2}-\d{2})\s+at\s+\$([0-9]*\.?[0-9]+)', text, re.IGNORECASE)
+    cross_match = re.search(r'\bCrossover\b\s+on\s+(\d{4}-\d{2}-\d{2})\s+at\s+\$([0-9]*\.?[0-9]+)', text, re.IGNORECASE)
 
-    if match:
-        stage = match.group(1).upper()
-        date = match.group(2)
-        return stage, date
+    stage = None
+    cross_date = cross_price = None
 
-    # Fallback: if only stage present
-    stage_match = re.search(r'\b(STAGE\d)\b', text, re.IGNORECASE)
-    stage = stage_match.group(1).upper() if stage_match else None
+    if stage_match:
+        stage = stage_match.group(1).upper()
 
-    return stage, None
+    if cross_match:
+        cross_date = cross_match.group(1)
+        cross_price = float(cross_match.group(2))
+
+    return stage, cross_date, cross_price
 
 def process_data(app, exchange, currency, duration, bar_size, import_module, model_name, dollar_size_limit):
     # Initialize logging
@@ -53,30 +68,72 @@ def process_data(app, exchange, currency, duration, bar_size, import_module, mod
 
         if tickers:
             for ticker in tickers:
-                # dividends_summary, dividends_count = fd.generate_dividend_for_ticker(ticker+".ax", app, currency)
-                data = get_ticker_data(ticker, currency, duration, bar_size, dollar_size_limit)
+                data = get_ticker_data(app, ticker, currency, duration, bar_size, dollar_size_limit)
 
                 if data:
                     # Generate insight
                     if len(model_name) > 0:
                         insight = import_module.generate_insight(ticker, model_name, logger, data)
                     else:
-                        insight = import_module.generate_insight(ticker, logger, data)
+                        insight = import_module.generate_insight(ticker, logger, data, None, None)
 
                     if insight != None:
-                        stage, date = extract_stage_and_date(insight)
+                        stage, open_cross_date, open_cross_price = extract_stage_and_date(insight)
                         # Only track the stock if its stage is Stage 2
-                        if stage.lower() == 'stage2' :
-                            tr.track_stock(ticker, stage=stage, price=data[-1].close, cross_date=date)
+                        if stage != None and stage.lower() == 'stage2' :
+                            tr.track_stock(ticker, stage=stage, price=data[-1].close, open_cross_date=open_cross_date, open_cross_price=open_cross_price)
 
-                        print("ticker == ",ticker, "stage == ",stage, "data==", data)
+                        logger.info("ticker == ",ticker, "stage == ",stage, "data==", data)
                     else:
-                        print("ticker == ",ticker, 'has no insights as no data found')
+                        logger.info("ticker == ",ticker, 'has no insights as no data found')
         else:
             logger.warning(f"No stock data available from {exchange}")
 
     except Exception as e:
         logger.error(f"Main application error: {str(e)}")
+
+from datetime import datetime
+
+def check_db_stocks_still_stage_2(app, currency, duration, bar_size, import_module, model_name, dollar_size_limit):
+    open_positions = tr.get_open_positions()
+
+    for rec in open_positions:
+        ticker = rec["ticker"]
+        buy_date = rec["open_date"]
+        open_crossover_price = rec.get("open_crossover_price")    # Your breakout price field
+        open_crossover_date = rec.get("open_crossover_date")      # Your breakout date field
+        print(f"Checking {ticker} flagged on {buy_date}")
+
+        try:
+            # Fetch latest market data
+            data = get_ticker_data(app, ticker, currency, duration, bar_size, dollar_size_limit)
+
+            if data:
+                # Generate insight using the same process_data logic
+                if model_name:
+                    insight = import_module.generate_insight(ticker, model_name, logger, data)
+                else:
+                    insight = import_module.generate_insight(ticker, logger, data, open_crossover_date, open_crossover_price)
+
+                if insight:
+                    stage, close_crossover_date, close_crossover_price = extract_stage_and_date(insight)
+
+                    if stage != None and close_crossover_date != None and close_crossover_price != None and stage.upper() != "STAGE2":
+                        close_date = data[-1].date
+                        close_price = data[-1].close
+                        print(f"Closing {ticker}: moved to {stage} on {close_crossover_date} at {close_crossover_price}")
+                        tr.update_close_info(ticker, close_date=close_date, close_price=close_price
+                                             , close_crossover_date=close_crossover_date, close_crossover_price=close_crossover_price)
+
+                    logger.info(f"{ticker} is still in stage2")
+
+                else:
+                    logger.info(f"No insight returned for {ticker}")
+            else:
+                logger.info(f"No data available for {ticker}")
+        except Exception as e:
+            logger.error(f"Error checking {ticker}: {e}")
+
 
 if __name__ == "__main__":
 
@@ -110,4 +167,5 @@ if __name__ == "__main__":
 
     # Ensure the database is initialized before processing data
     tr.initialize_db()
+    check_db_stocks_still_stage_2(app, currency, duration, bar_size, imported_module, model_name, dollar_size_limit)
     process_data(app, exchange, currency, duration, bar_size, imported_module, model_name, dollar_size_limit)

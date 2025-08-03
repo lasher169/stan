@@ -60,7 +60,7 @@ def enforce_rate_limit():
     api_usage[current_api_key] += 1
     print(f"Using API key {current_api_key}, Request Count: {api_usage[current_api_key]}")
 
-def generate_insight(ticker, logger, data):
+def generate_insight(ticker, logger, data, open_crossover_date, open_crossover_price):
     """
     Generates an investment insight based on a given RAG status, ticker symbol,
     5-day SMA, and 30-day SMA using the Gemini Pro model.
@@ -87,23 +87,49 @@ def generate_insight(ticker, logger, data):
 
         content = []
 
-        content.append("Date, Open, High, Low, Close, Volume\n")
 
         for row in data:
             content.append(f"{row.date},{row.open},{row.high},{row.low},{row.close},{row.volume}\n")
 
-        prompt = f" Using price action, 5-day and 30-day SMA crossover, and whether today’s volume is > 1.5× the 30-day average: \n \
-                 Determine the most recent **confirmed** trend stage breakout according to Stan Weinstein’s method. A valid Stage 2 must: \n \
-                - follow a sustained 5 / 30 bullish crossover, \n \
-                - break above recent resistance, \n \
-                - and show strong volume confirmation. \n \
-                Return: \n \
-                    1. Current stage: STAGE1, STAGE2, STAGE3, or STAGE4 \n \
-                    2. Most recent 5/30 crossover date (if any) \n \
-                    No explanation. No code. Just: STAGEX on YYYY-MM-DD \n \
-                    {', '.join(map(str, content))}"
+            # === Base rules for all stocks ===
+            base_prompt = (
+                "Act as a rules-based trading analyst. Using the provided OHLCV data, determine the stock's current stage based on the strict interpretation of Stan Weinstein's method.\n\n"
 
-        print(f"Sending prompt to Gemini: {prompt}")
+                "**Stage Rules:**\n"
+                "1. **Stage 1 (Basing):** The 30-day SMA is flattening (trending sideways). The price oscillates above and below the 30-day SMA.\n"
+                "2. **Stage 2 (Advancing):** Must meet all three criteria:\n"
+                "   a. **Breakout:** The price closes decisively above the Stage 1 resistance range, with a bullish 5/30 SMA crossover in place.\n"
+                "   b. **Volume:** The breakout occurs on volume at least 2 times the 30-day average.\n"
+                "   c. **Continuation:** The stock establishes a pattern of higher highs and higher lows. The price must consistently find support at or above a rising 30-day SMA.\n\n"
+                "3. **Stage 3 (Topping):** After a Stage 2 advance, the 30-day SMA flattens. Price action becomes choppy and more frequently crosses below the 30-day SMA. A bearish 5/30 crossover may occur.\n"
+                "4. **Stage 4 (Declining):** The price is consistently below a declining 30-day SMA, often with the 5-day SMA also below. Price forms lower highs and lower lows.\n\n"
+
+                "Evaluate the most recent data first. Identify:\n"
+                "- The current stage of the stock (STAGE1, STAGE2, STAGE3, or STAGE4)\n"
+                "- The most recent **confirmed 5/30 bullish crossover** date that initiated a valid Stage 2 breakout (if any)\n\n"
+
+                "Return only the following format:\n"
+                "STAGEX on YYYY-MM-DD at $CLOSE_PRICE\n"
+                "Crossover on YYYY-MM-DD at $CLOSE_PRICE\n"
+            )
+
+            # # === Optional Stage99 block for flagged shares
+            # stage99_block = ""
+            # if open_crossover_date and open_crossover_price:
+            #     target_price = round(float(open_crossover_price) * 1.10, 4)
+            #     stage99_block = (
+            #         "**Momentum Failure Rule (only applies to flagged Stage 2 stocks):**\n"
+            #         f"If the most recent confirmed 5/30 crossover was on {open_crossover_date} at ${open_crossover_price},\n"
+            #         f"and 20 or more trading days have passed since that date, and the current price is less than 10% above the crossover price (i.e., less than ${target_price}),\n"
+            #         "then return:\n"
+            #         "STAGE99 on YYYY-MM-DD at $CLOSE_PRICE\n"
+            #         "to indicate the breakout failed due to lack of momentum.\n\n"
+            #     )
+        csv_header = "\n\nDate, Open, High, Low, Close, Volume\n"
+        csv_data = ', '.join(map(str, content))
+        prompt = f"{base_prompt}{csv_header}{csv_data}"
+
+        logger.info(prompt)
 
         response = model.generate_content(prompt)
 
@@ -111,9 +137,6 @@ def generate_insight(ticker, logger, data):
         print(f"Gemini Response: {response.text}")
         return response.text
 
-    except FileNotFoundError as e:
-        logger.error(f"Error: File not found at path {e.filename}. Not retrying.")
-        return None
     except Exception as e:
         logger.error(f"Error: {e} (API Key: {key}). Not retrying.")
         return None  # Or handle it as needed
