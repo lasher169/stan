@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 port = 4002
 
 def get_ticker_data(app, ticker, currency, duration, bar_size, dollar_size_limit):
-    total_data = ibkr.getData(app, ticker, currency, duration, bar_size, dollar_size_limit)
+    total_data = ibkr.getData(app, ticker, currency, duration, bar_size, dollar_size_limit, None)
     return total_data
 
 
@@ -143,9 +143,9 @@ def check_db_stocks_still_stage_2(app, currency, duration, bar_size, import_modu
                         close_price = data[-1].close
                         print(f"Closing {ticker}: moved to {stage} on {close_crossover_date} at {close_crossover_price}")
                         tr.update_close_info(ticker, close_date=close_date, close_price=close_price, close_crossover_date=close_crossover_date, close_crossover_price=close_crossover_price)
-                        logger.info(f"{ticker} is still in stage2")
-                    else:
                         logger.info(f"{ticker} is no longer in stage2 but now in {stage}")
+                    else:
+                        logger.info(f"{ticker} is still in stage2")
                 else:
                     logger.info(f"No insight returned for {ticker}")
             else:

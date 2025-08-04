@@ -6,10 +6,10 @@ def setup_ibkr(port=4002):
     ibkr.connect("127.0.0.1", port, clientId=0)
     return ibkr
 
-def getData(app, ticker, currency, duration, bar_size, dollar_size_limit):
+def getData(app, ticker, currency, duration, bar_size, dollar_size_limit, exchange_type):
     time.sleep(3)  # space requests to avoid rate limits
 
-    data = (app.get_historical_data(ticker, currency, duration, bar_size))
+    data = (app.get_historical_data(ticker, currency, duration, bar_size, exchange_type))
     # if data:
     #     close_price = data[-1][-1].close
     #     vol = data[-1][-1].volume
@@ -92,3 +92,8 @@ def place_stop_loss(app, contract, entry_price, action, volume, logger):
     stop_order = StopOrder(stop_action, volume, stop_price)
     app.placeOrder(contract, stop_order)
     logger.info(f"Stop {stop_action} at {stop_price} placed.")
+
+if __name__ == "__main__":
+    app = setup_ibkr(4002)
+    ticker = "ACM"
+    getData(app, ticker, currency="AUD", duration="120 d", bar_size="1 day", dollar_size_limit=1000000, exchange_type="ASX")
