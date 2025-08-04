@@ -64,7 +64,7 @@ def extract_stage_and_date(text):
     else:
         return None, None, None
 
-def process_data(app, exchange, currency, duration, bar_size, import_module, model_name, dollar_size_limit):
+def process_data(app, exchange, currency, duration, bar_size, import_module, model_name, dollar_size_limit, trade_amount):
     # Initialize logging
     logger.info("Stock Analysis Application Started")
 
@@ -81,14 +81,29 @@ def process_data(app, exchange, currency, duration, bar_size, import_module, mod
                     if len(model_name) > 0:
                         insight = import_module.generate_insight(ticker, model_name, logger, data)
                     else:
-                        insight = import_module.generate_insight(logger, data)
+                        insight = import_module.generate_insight(ticker, logger, data, None, None)
 
-                    if insight != None:
+                    if insight is not None:
                         stage, open_cross_date, open_cross_price = extract_stage_and_date(insight)
                         # Only track the stock if its stage is Stage 2
                         if stage != None and stage.lower() == 'stage2' :
+
+                            # --- PLACE ORDER LOGIC HERE ---
+                            # Example: Calculate volume, price, etc.
+                            # buy_price = data[-1].close
+                            # volume = int(float(trade_amount)/float(buy_price))
+                            # action = "BUY"  # or "put" if you mean options; "BUY" for long stock
+                            # # Place the order
+                            # order_result = ibkr.place_order(app, ticker, buy_price, action, exchange, currency, volume)
+                            # logger.info(f"Order placed for {ticker}: {order_result}")
+
                             tr.track_stock(ticker, stage=stage, price=data[-1].close, open_cross_date=open_cross_date, open_cross_price=open_cross_price)
                             logger.info(f"ticker == {ticker} stage == {stage} data== {data}")
+
+                            # Optional: place stop-loss after order fill
+                            # stop_loss_price = buy_price * (1 - stop_pct)
+                            # place_stop_loss(app, ticker, stop_loss_price, volume, exchange, currency)
+
                     else:
                         logger.info(f"ticker == {ticker} has no insights as no data found")
         else:
@@ -97,7 +112,7 @@ def process_data(app, exchange, currency, duration, bar_size, import_module, mod
     except Exception as e:
         logger.error(f"Main application error: {str(e)}")
 
-from datetime import datetime
+
 
 def check_db_stocks_still_stage_2(app, currency, duration, bar_size, import_module, model_name, dollar_size_limit):
     open_positions = tr.get_open_positions()
@@ -105,6 +120,8 @@ def check_db_stocks_still_stage_2(app, currency, duration, bar_size, import_modu
     for rec in open_positions:
         ticker = rec["ticker"]
         buy_date = rec["open_date"]
+        open_crossover_date = rec["open_crossover_date"]
+        open_crossover_price = rec["open_crossover_price"]
         print(f"Checking {ticker} flagged on {buy_date}")
 
         try:
@@ -114,9 +131,9 @@ def check_db_stocks_still_stage_2(app, currency, duration, bar_size, import_modu
             if data:
                 # Generate insight using the same process_data logic
                 if model_name:
-                    insight = import_module.generate_insight(model_name, logger, data)
+                    insight = import_module.generate_insight(ticker, model_name, logger, data)
                 else:
-                    insight = import_module.generate_insight(logger, data)
+                    insight = import_module.generate_insight(ticker, logger, data, crossover_date=open_crossover_date, crossover_price=open_crossover_price)
 
                 if insight:
                     stage, close_crossover_date, close_crossover_price = extract_stage_and_date(insight)
@@ -126,9 +143,9 @@ def check_db_stocks_still_stage_2(app, currency, duration, bar_size, import_modu
                         close_price = data[-1].close
                         print(f"Closing {ticker}: moved to {stage} on {close_crossover_date} at {close_crossover_price}")
                         tr.update_close_info(ticker, close_date=close_date, close_price=close_price, close_crossover_date=close_crossover_date, close_crossover_price=close_crossover_price)
-
-                    logger.info(f"{ticker} is still in stage2")
-
+                        logger.info(f"{ticker} is still in stage2")
+                    else:
+                        logger.info(f"{ticker} is no longer in stage2 but now in {stage}")
                 else:
                     logger.info(f"No insight returned for {ticker}")
             else:
@@ -148,10 +165,11 @@ if __name__ == "__main__":
     duration = sys.argv[3]
     bar_size = sys.argv[4]
     dollar_size_limit = sys.argv[5]
-    llm = sys.argv[6]
+    trade_amount = sys.argv[6]
+    llm = sys.argv[7]
 
-    if len(sys.argv) > 7:
-        model_name = sys.argv[7]
+    if len(sys.argv) > 8:
+        model_name = sys.argv[8]
     else:
         model_name = ""
 
@@ -170,4 +188,4 @@ if __name__ == "__main__":
     # Ensure the database is initialized before processing data
     tr.initialize_db()
     check_db_stocks_still_stage_2(app, currency, duration, bar_size, imported_module, model_name, dollar_size_limit)
-    process_data(app, exchange, currency, duration, bar_size, imported_module, model_name, dollar_size_limit)
+    process_data(app, exchange, currency, duration, bar_size, imported_module, model_name, dollar_size_limit, trade_amount)

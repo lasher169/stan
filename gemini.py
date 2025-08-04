@@ -60,7 +60,7 @@ def enforce_rate_limit():
     api_usage[current_api_key] += 1
     print(f"Using API key {current_api_key}, Request Count: {api_usage[current_api_key]}")
 
-def generate_insight(logger, data):
+def generate_insight(ticker, logger, data, crossover_date, crossover_price):
     """
     Generates an investment insight based on a given RAG status, ticker symbol,
     5-day SMA, and 30-day SMA using the Gemini Pro model.
@@ -92,52 +92,31 @@ def generate_insight(logger, data):
             content.append(f"{row.date},{row.open},{row.high},{row.low},{row.close},{row.volume}\n")
 
             # === Base rules for all stocks ===
-            base_prompt = (
-                "Act as a strict rules-based trading analyst. Using the provided OHLCV data, determine the stock's current stage based on the classic Stan Weinstein method.\n\n"
-                "**Stage Rules:**\n"
-                "1. **Stage 1 (Basing):** The 30-day SMA is flattening (trending sideways). Price oscillates above and below the 30-day SMA.\n"
-                "2. **Stage 2 (Advancing):** Must meet ALL the following criteria, ALL on the SAME day:\n"
-                "   a. **Breakout:** The CLOSE is decisively ABOVE the Stage 1 resistance level. Define resistance as the highest CLOSE during the entire basing period (or at least the prior 6–8 weeks).\n"
-                "   b. **Crossover:** The 5-day SMA is ABOVE the 30-day SMA (bullish 5/30 crossover).\n"
-                "   c. **Volume:** Volume is at least 2 TIMES the 30-day average volume on the breakout day.\n"
-                "   - When ALL criteria occur on the SAME bar, Stage 2 is confirmed IMMEDIATELY on the breakout day. Do NOT wait for additional confirmation or for higher highs/lows.\n\n"
-                "3. **Stage 3 (Topping):** After a Stage 2 advance, the 30-day SMA flattens. Price action becomes choppy and more frequently crosses below the 30-day SMA. A bearish 5/30 crossover may occur.\n"
-                "4. **Stage 4 (Declining):** The price is consistently below a declining 30-day SMA, with the 5-day SMA also below. Price forms lower highs and lower lows.\n\n"
-                "**Note on volume bar colors:** Infer bar color from price:\n"
-                "- If today’s close is lower than the previous day’s close, the volume bar is red.\n"
-                "- If today’s close is equal to or higher than the previous day’s close, the volume bar is green.\n"
-                "- Red bars are NOT selling pressure, just a down close.\n\n"
-                "**Evaluation method:**\n"
-                "- Always check the most recent data first. For Stage 2, look for the FIRST bar that meets ALL the Stage 2 breakout conditions above, using the resistance definition as specified.\n"
-                "- Return the earliest date where a valid Stage 2 breakout occurs (do not wait for later breakouts in the same run-up).\n"
-                "- If the stock is no longer in Stage 2, do not report Stage 2 as current.\n\n"
-                "Return only this format:\n"
-                "STAGEX Crossover on YYYY-MM-DD at $CLOSE_PRICE\n"
+            base_prompt = ""
+            breakout_prompt = (
+                f"Act as a strict rules-based trading analyst. Using the provided OHLCV data, determine the first date the stock {ticker} entered Stage 2 based on the classic Stan Weinstein method.\n\n"
+                "**Stage 2 confirmation requires ALL of the following on the SAME day:**\n"
+                "1. CLOSE is ABOVE the resistance (highest CLOSE in past 6–8 weeks).\n"
+                "2. 5-day SMA is ABOVE the 30-day SMA.\n"
+                "3. Volume is at least 2× the 30-day average volume.\n\n"
+                "**Return ONLY this format. No explanation:**\n"
+                "- STAGEX on YYYY-MM-DD at $CLOSE_PRICE\n"
             )
-            # base_prompt = (
-            #     "Act as a rules-based trading analyst. Using the provided OHLCV data, determine the stock's current stage based on a strict, classic Stan Weinstein method.\n\n"
-            #     "**Stage Rules:**\n"
-            #     "1. **Stage 1 (Basing):** The 30-day SMA is flattening (trending sideways). The price oscillates above and below the 30-day SMA.\n"
-            #     "2. **Stage 2 (Advancing):** Must meet all three criteria, all on the same day:\n"
-            #     "   a. **Breakout:** The price closes decisively above the Stage 1 resistance range, with a bullish 5/30 SMA crossover in place.\n"
-            #     "   b. **Volume:** The breakout occurs on volume at least 2 times the 30-day average.\n"
-            #     "   c. **Do NOT wait for a pattern of higher highs or higher lows. Stage 2 is confirmed immediately on the breakout day if the above conditions are met.**\n"
-            #     "   - After entry, monitor for continuation, but entry is made on breakout day if above criteria are met.\n\n"
-            #     "3. **Stage 3 (Topping):** After a Stage 2 advance, the 30-day SMA flattens. Price action becomes choppy and more frequently crosses below the 30-day SMA. A bearish 5/30 crossover may occur.\n"
-            #     "4. **Stage 4 (Declining):** The price is consistently below a declining 30-day SMA, often with the 5-day SMA also below. Price forms lower highs and lower lows.\n\n"
-            #     "**Note on volume bar colors:** You must infer volume bar color from price:\n"
-            #     "- If today’s close is lower than the previous day’s close, the volume bar is red.\n"
-            #     "- If today’s close is equal to or higher than the previous day’s close, the volume bar is green.\n"
-            #     "- **Do not treat red bars as selling pressure.** Red simply reflects a down close, and may still occur during a strong Stage 2.\n\n"
-            #     "Evaluate the most recent data first. Identify:\n"
-            #     "- The current stage of the stock (STAGE1, STAGE2, STAGE3, or STAGE4) based on the latest data.\n"
-            #     "- The most recent **confirmed 5/30 bullish crossover** date and closing price that initiated a valid Stage 2 breakout, if one ever occurred in the data.\n"
-            #     "- **Always output the most recent valid 5/30 bullish crossover date and price, even if the current stage is not Stage 2. If no Stage 2 breakout occurred, return 'None' for the crossover date and price.**\n"
-            #     "- Never report Stage 2 if the stock is now in Stage 3 or Stage 4.\n\n"
-            #     "Return only the following format:\n"
-            #     "STAGEX Crossover on YYYY-MM-DD at $CLOSE_PRICE\n"
-            # )
+            validation_prompt = (
+                f"Act as a strict rules-based trading analyst. Using the provided OHLCV data, determine if Stage 2 is still valid for {ticker}.\n\n"
+                f"Stage 2 breakout was previously confirmed on {crossover_date} at ${crossover_price:.2f}.\n"
+                "**Stage 2 is considered FAILED if either of the following occurs:**\n"
+                "- CLOSE remains below the 30-day SMA for 5 or more consecutive days.\n"
+                "- The 30-day SMA flattens or turns downward.\n"
+                "If failed, reclassify as Stage 1 or Stage 4 based on recent price action.\n\n"
+                "**Return ONLY ONE of the following (no explanation):**\n"
+                "- STAGEX on YYYY-MM-DD at $CLOSE_PRICE\n"
+            )
 
+            if crossover_date != None and crossover_price != None:
+                base_prompt += validation_prompt
+            else:
+                base_prompt += breakout_prompt
 
         csv_header = "\n\nDate, Open, High, Low, Close, Volume\n"
         csv_data = ', '.join(map(str, content))

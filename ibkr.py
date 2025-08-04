@@ -63,31 +63,32 @@ def stop_pct_from_price(price):
         return 0.025
 
 def place_order(app, ticker, price, action, exchange, currency, volume, logger):
-    '''
-    Places a limit order with a protective stop-loss order.
+    """
+    Places a limit entry order.
     action = 'BUY' or 'SELL'
-    '''
+    """
     contract = Stock(ticker, exchange, currency)
-
-    # Define limit entry order
     limit_order = LimitOrder(action, volume, price)
-
-    # Place entry order
-    trade = app.placeOrder(contract, limit_order)
+    app.placeOrder(contract, limit_order)
     app.sleep(1)
+    logger.info(f"Limit {action.upper()} order at {price} placed.")
+    return contract, price  # Return contract for stop-loss
 
-    # Determine stop price
-    stop_pct = stop_pct_from_price(price)
+
+def place_stop_loss(app, contract, entry_price, action, volume, logger):
+    """
+    Places a protective stop-loss order.
+    For BUY entry: places a SELL stop-loss.
+    For SELL entry: places a BUY stop-loss.
+    """
+    stop_pct = stop_pct_from_price(entry_price)
     if action.upper() == 'BUY':
-        stop_price = round(price * (1 - stop_pct), 4)
+        stop_price = round(entry_price * (1 - stop_pct), 4)
         stop_action = 'SELL'
     else:
-        stop_price = round(price * (1 + stop_pct), 4)
+        stop_price = round(entry_price * (1 + stop_pct), 4)
         stop_action = 'BUY'
 
-    # Define stop-loss order (separate order)
     stop_order = StopOrder(stop_action, volume, stop_price)
     app.placeOrder(contract, stop_order)
-
-    logger.info(f"Limit {action.upper()} at {price} placed.")
     logger.info(f"Stop {stop_action} at {stop_price} placed.")
